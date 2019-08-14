@@ -1,0 +1,8 @@
+/nbproject/
+/cmake-bu*/
+/bu*/
+/.idea/
+*.dylib
+*.so
+*.a
+*.o
