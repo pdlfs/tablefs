@@ -1,0 +1,41 @@
+/*
+ * Copyright (c) 2019 Carnegie Mellon University,
+ * Copyright (c) 2019 Triad National Security, LLC, as operator of
+ *     Los Alamos National Laboratory.
+ *
+ * All rights reserved.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. See the AUTHORS file for names of contributors.
+ */
+ 
+/*
+ * pdlfs_platform.h.in  platform-wide constants
+ * 29-Jul-2016  chuck@ece.cmu.edu
+ */
+
+#ifndef PDLFS_COMMON_PDLFS_PLATFORM_H
+#define PDLFS_COMMON_PDLFS_PLATFORM_H 1
+
+/*
+ * cmake will convert these to real preprocessor defines as part
+ * of the configuration process.
+ */
+#cmakedefine PDLFS_PLATFORM_POSIX
+#cmakedefine PDLFS_OS_CYGWIN
+#cmakedefine PDLFS_OS_DARWIN
+#cmakedefine PDLFS_OS_MACOSX
+#cmakedefine PDLFS_OS_CRAYLINUX
+#cmakedefine PDLFS_OS_LINUX
+#cmakedefine PDLFS_OS_SOLARIS
+#cmakedefine PDLFS_OS_FREEBSD
+#cmakedefine PDLFS_OS_NETBSD
+#cmakedefine PDLFS_OS_OPENBSD
+#cmakedefine PDLFS_OS_HPUX
+
+#define PDLFS_TARGET_OS_VERSION "@PDLFS_TARGET_OS_VERSION@"
+#define PDLFS_TARGET_OS "@PDLFS_TARGET_OS@"
+#define PDLFS_HOST_OS_VERSION "@PDLFS_HOST_OS_VERSION@"
+#define PDLFS_HOST_OS "@PDLFS_HOST_OS@"
+
+#endif /* PDLFS_COMMON_PDLFS_PLATFORM_H */

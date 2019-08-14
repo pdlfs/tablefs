@@ -1,0 +1,34 @@
+/*
+ * Copyright (c) 2019 Carnegie Mellon University,
+ * Copyright (c) 2019 Triad National Security, LLC, as operator of
+ *     Los Alamos National Laboratory.
+ *
+ * All rights reserved.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. See the AUTHORS file for names of contributors.
+ */
+
+/*
+ * pdlfs_config_expand.h.in  base config and defns from cmake
+ * 02-Jun-2016  chuck@ece.cmu.edu
+ */
+
+/*
+ * this file should only be included by pdlfs_config.h.
+ */
+
+#define PDLFS_COMMON_PREFIX "@CMAKE_INSTALL_PREFIX@"
+
+#define PDLFS_COMMON_VERSION_MAJOR @PDLFS_COMMON_VERSION_MAJOR@
+#define PDLFS_COMMON_VERSION_MINOR @PDLFS_COMMON_VERSION_MINOR@
+#define PDLFS_COMMON_VERSION_PATCH @PDLFS_COMMON_VERSION_PATCH@
+#define PDLFS_COMMON_VERSION "@PDLFS_COMMON_VERSION@"
+#define PDLFS_COMMON_LIBNAME "@PDLFS_NAME@"
+
+#cmakedefine PDLFS_GFLAGS
+#cmakedefine PDLFS_GLOG
+#cmakedefine PDLFS_MARGO_RPC
+#cmakedefine PDLFS_MERCURY_RPC
+#cmakedefine PDLFS_RADOS
+#cmakedefine PDLFS_SNAPPY
