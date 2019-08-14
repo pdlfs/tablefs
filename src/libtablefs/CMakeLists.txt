@@ -1,0 +1,125 @@
+#
+# Copyright (c) 2019 Carnegie Mellon University,
+# Copyright (c) 2019 Triad National Security, LLC, as operator of
+#     Los Alamos National Laboratory.
+#
+# All rights reserved.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file. See the AUTHORS file for names of contributors.
+#
+
+#
+# list of source files and tests
+#
+
+# main directory sources and tests
+set (tablefs-srcs tablefs.cc)
+
+# configure/load in standard modules we plan to use
+include (CMakePackageConfigHelpers)
+set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set (THREADS_PREFER_PTHREAD_FLAG TRUE)
+
+# note: cmake 3.1 and newer define a Threads::Threads imported target
+# that we should switch to when we are ready to require 3.1 or better.
+# cmake 3.1 was released late 2014.
+find_package (Threads REQUIRED)
+
+# common lib is always required
+set (TABLEFS_REQUIRED_PACKAGES "tablefs-common")
+
+# where the cmake package files get installed (for find_package)
+set (tfs-pkg-loc "share/cmake/tablefs")
+
+#
+# library version set here (e.g. for generating shared libs if we want
+#
+set (TABLEFS_VERSION_MAJOR 1)
+set (TABLEFS_VERSION_MINOR 0)
+set (TABLEFS_VERSION_PATCH 0)
+set (tfs-vers "${TABLEFS_VERSION_MAJOR}.${TABLEFS_VERSION_MINOR}")
+set (TABLEFS_VERSION "${tfs-vers}.${TABLEFS_VERSION_PATCH}")
+
+# setup and configure tablefs_config.h.in
+configure_file ("../../include/tablefs/tablefs_config.h.in"
+                "../../include/tablefs/tablefs_config.h" @ONLY)
+
+#
+# generate complete list of files and tests from the parts
+#
+set (tablefs-all-srcs ${tablefs-srcs})
+
+#
+# create the library target (user can specify shared vs. static
+# using BUILD_SHARED_LIBS).   arrange for users of our lib to
+# get the correct -Is for our include directories.  (for building
+# we need a -I pointing to the build dir for pdlfs_config_expand.h)
+#
+add_library (tablefs ${tablefs-all-srcs})
+target_include_directories (tablefs PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories (tablefs BEFORE PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>)
+target_link_libraries (tablefs tablefs-common)
+if (THREADS_HAVE_PTHREAD_ARG)
+    target_compile_options(tablefs PUBLIC "-pthread")
+endif()
+if (CMAKE_THREAD_LIBS_INIT)
+    target_link_libraries (tablefs "${CMAKE_THREAD_LIBS_INIT}")
+endif ()
+set_target_properties(tablefs PROPERTIES VERSION ${TABLEFS_VERSION}
+                      SOVERSION ${TABLEFS_VERSION_MAJOR})
+
+#
+#
+# here's the compiler/machine/os dependent stuff...
+# this likely isn't that useful (carryover from leveldb)
+#
+
+# "-pthread" should take care of all thread related options.
+# but if we don't have it, fall back to -D_REENTRANT
+if (NOT THREADS_HAVE_PTHREAD_ARG)
+    target_compile_definitions (tablefs PUBLIC -D_REENTRANT)
+endif ()
+
+# XXX: untested solaris, does it need "-mt"?
+# XXX: leveldb also added "-lrt" .. but is that really needed?
+if (${CMAKE_SYSTEM_NAME} STREQUAL "SunOS")
+    CHECK_CXX_COMPILER_FLAG (-mt flag-mt)
+    if (${flag-mt})
+        target_compile_options (tablefs PUBLIC -mt)
+    endif ()
+endif ()
+
+#
+# end of the compiler/machine/os dependent stuff!
+#
+
+#
+# installation stuff (packaging and install commands)
+#
+write_basic_package_version_file(
+    "tablefs-config-version.cmake"
+    VERSION ${TABLEFS_VERSION}
+    COMPATIBILITY AnyNewerVersion)
+
+# generate our config file for find_package()
+configure_file (tablefs-config.cmake.in tablefs-config.cmake @ONLY)
+
+# "make install" rules...
+install (TARGETS tablefs EXPORT tablefs-targets
+         ARCHIVE DESTINATION lib
+         LIBRARY DESTINATION lib)
+install (EXPORT tablefs-targets
+         DESTINATION ${tfs-pkg-loc})
+install (FILES "${CMAKE_CURRENT_BINARY_DIR}/tablefs-config.cmake"
+               "${CMAKE_CURRENT_BINARY_DIR}/tablefs-config-version.cmake"
+         DESTINATION ${tfs-pkg-loc})
+install (DIRECTORY ../../include/tablefs
+         DESTINATION include
+         FILES_MATCHING PATTERN "*.h")
+install (FILES
+   "${CMAKE_CURRENT_BINARY_DIR}/../../include/tablefs/tablefs_config.h"
+   DESTINATION include/tablefs)
+
