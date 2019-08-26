@@ -16,15 +16,50 @@
 namespace pdlfs {
 
 std::string DirId::DebugString() const {
+#define LLU(x) static_cast<unsigned long long>(x)
   char tmp[30];
 #if defined(DELTAFS)
-  snprintf(tmp, sizeof(tmp), "uuid[%llu:%llu:%llu]", (unsigned long long)reg,
-           (unsigned long long)snap, (unsigned long long)ino);
+  snprintf(tmp, sizeof(tmp), "dirid[%llu:%llu:%llu]", LLU(reg), LLU(snap),
+           LLU(ino));
 #else
-  snprintf(tmp, sizeof(tmp), "uuid[%llu]", (unsigned long long)ino);
+  snprintf(tmp, sizeof(tmp), "dirid[%llu]", LLU(ino));
 #endif
   return tmp;
 }
+
+DirId::DirId() : reg(0), snap(0), ino(0) {}
+#if !defined(DELTAFS)
+DirId::DirId(uint64_t ino) : reg(0), snap(0), ino(ino) {}
+#endif
+
+namespace {
+int compare64(uint64_t a, uint64_t b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+}  // namespace
+int DirId::compare(const DirId& other) const {
+  int r;
+#if defined(DELTAFS)
+  r = compare64(reg, other.reg);
+  if (r != 0) return r;
+  r = compare64(snap, other.snap);
+  if (r != 0) {
+    return r;
+  }
+#endif
+
+  r = compare64(ino, other.ino);
+  return r;
+}
+
+MDBOptions::MDBOptions()
+    : fill_cache(false), verify_checksums(false), sync(false), db(NULL) {}
+
+MDB::MDB(const MDBOptions& opts) : MXDB(opts.db) {}
+
+MDB::~MDB() {}
 
 #if defined(DELTAFS)
 #define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
@@ -32,20 +67,25 @@ std::string DirId::DebugString() const {
 #define KEY_INITIALIZER(id, tp) id.ino, tp
 #endif
 
-MDBOptions::MDBOptions() : verify_checksums(false), sync(false), db(NULL) {}
+Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat,
+                    std::string* name, Tx* tx) {
+  ReadOptions read_options;
+  read_options.verify_checksums = options_.verify_checksums;
+  read_options.fill_cache = options_.fill_cache;
+  return GET<Key>(id, hash, stat, name, &read_options, tx);
+}
 
-MDB::~MDB() {}
-
-Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
+Status MDB::GetDirIdx(const DirId& id, DirIndex* idx, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirIdxType));
   std::string tmp;
-  ReadOptions options;
-  options.verify_checksums = options_.verify_checksums;
+  ReadOptions read_options;
+  read_options.verify_checksums = options_.verify_checksums;
+  read_options.fill_cache = options_.fill_cache;
   if (tx != NULL) {
-    options.snapshot = tx->snap;
+    read_options.snapshot = tx->snap;
   }
-  s = db_->Get(options, key.prefix(), &tmp);
+  s = dx_->Get(read_options, key.prefix(), &tmp);
   if (s.ok()) {
     if (!idx->Update(tmp)) {
       s = Status::Corruption(Slice());
@@ -58,13 +98,14 @@ Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirMetaType));
   char tmp[20];
-  ReadOptions options;
-  options.verify_checksums = options_.verify_checksums;
+  ReadOptions read_options;
+  read_options.verify_checksums = options_.verify_checksums;
+  read_options.fill_cache = options_.fill_cache;
   if (tx != NULL) {
-    options.snapshot = tx->snap;
+    read_options.snapshot = tx->snap;
   }
   Slice result;
-  s = db_->Get(options, key.prefix(), &result, tmp, sizeof(tmp));
+  s = dx_->Get(read_options, key.prefix(), &result, tmp, sizeof(tmp));
   if (s.ok()) {
     if (!info->DecodeFrom(&result)) {
       s = Status::Corruption(Slice());
@@ -73,39 +114,23 @@ Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
   return s;
 }
 
-Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
-                    Tx* tx) {
-  Status s;
-  Key key(KEY_INITIALIZER(id, kDirEntType));
-  key.SetHash(hash);
-  std::string tmp;
-  ReadOptions options;
-  options.verify_checksums = options_.verify_checksums;
-  if (tx != NULL) {
-    options.snapshot = tx->snap;
-  }
-  s = db_->Get(options, key.Encode(), &tmp);
-  if (s.ok()) {
-    Slice input(tmp);
-    if (!stat->DecodeFrom(&input)) {
-      s = Status::Corruption(Slice());
-    } else if (!GetLengthPrefixedSlice(&input, name)) {
-      s = Status::Corruption(Slice());
-    }
-  }
-  return s;
+Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
+                    const Slice& name, Tx* tx) {
+  WriteOptions write_options;
+  write_options.sync = options_.sync;
+  return SET<Key>(id, hash, stat, name, &write_options, tx);
 }
 
-Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
+Status MDB::SetDirIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirIdxType));
   Slice encoding = idx.Encode();
   if (tx == NULL) {
     WriteOptions options;
     options.sync = options_.sync;
-    s = db_->Put(options, key.prefix(), encoding);
+    s = dx_->Put(options, key.prefix(), encoding);
   } else {
-    tx->batch.Put(key.prefix(), encoding);
+    tx->bat.Put(key.prefix(), encoding);
   }
   return s;
 }
@@ -118,51 +143,27 @@ Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
   if (tx == NULL) {
     WriteOptions options;
     options.sync = options_.sync;
-    s = db_->Put(options, key.prefix(), encoding);
+    s = dx_->Put(options, key.prefix(), encoding);
   } else {
-    tx->batch.Put(key.prefix(), encoding);
+    tx->bat.Put(key.prefix(), encoding);
   }
   return s;
 }
 
-Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
-                    const Slice& name, Tx* tx) {
-  Status s;
-  Key key(KEY_INITIALIZER(id, kDirEntType));
-  key.SetHash(hash);
-  Slice value;
-  char tmp[200];
-  std::string buf;
-  Slice encoding = stat.EncodeTo(tmp);
-  if (name.size() < sizeof(tmp) - encoding.size() - 5) {
-    char* begin = tmp;
-    char* end = begin + encoding.size();
-    end = EncodeLengthPrefixedSlice(end, name);
-    value = Slice(begin, end - begin);
-  } else {
-    buf.append(encoding.data(), encoding.size());
-    PutLengthPrefixedSlice(&buf, name);
-    value = Slice(buf);
-  }
-  if (tx == NULL) {
-    WriteOptions options;
-    options.sync = options_.sync;
-    s = db_->Put(options, key.Encode(), value);
-  } else {
-    tx->batch.Put(key.Encode(), value);
-  }
-  return s;
+Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
+  WriteOptions write_options;
+  return DELETE<Key>(id, hash, &write_options, tx);
 }
 
-Status MDB::DelIdx(const DirId& id, Tx* tx) {
+Status MDB::DelDirIdx(const DirId& id, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirIdxType));
   if (tx == NULL) {
     WriteOptions options;
     options.sync = options_.sync;
-    s = db_->Delete(options, key.prefix());
+    s = dx_->Delete(options, key.prefix());
   } else {
-    tx->batch.Delete(key.prefix());
+    tx->bat.Delete(key.prefix());
   }
   return s;
 }
@@ -173,83 +174,29 @@ Status MDB::DelInfo(const DirId& id, Tx* tx) {
   if (tx == NULL) {
     WriteOptions options;
     options.sync = options_.sync;
-    s = db_->Delete(options, key.prefix());
+    s = dx_->Delete(options, key.prefix());
   } else {
-    tx->batch.Delete(key.prefix());
-  }
-  return s;
-}
-
-Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
-  Status s;
-  Key key(KEY_INITIALIZER(id, kDirEntType));
-  key.SetHash(hash);
-  if (tx == NULL) {
-    WriteOptions options;
-    options.sync = options_.sync;
-    s = db_->Delete(options, key.Encode());
-  } else {
-    tx->batch.Delete(key.Encode());
+    tx->bat.Delete(key.prefix());
   }
   return s;
 }
 
 size_t MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx,
                  size_t limit) {
-  Key key(KEY_INITIALIZER(id, kDirEntType));
-  ReadOptions options;
-  options.verify_checksums = options_.verify_checksums;
-  options.fill_cache = false;
-  if (tx != NULL) {
-    options.snapshot = tx->snap;
-  }
-  Slice prefix = key.prefix();
-  Iterator* iter = db_->NewIterator(options);
-  iter->Seek(prefix);
-  Slice name;
-  Stat stat;
-  size_t num_entries = 0;
-  for (; iter->Valid() && num_entries < limit; iter->Next()) {
-    Slice key = iter->key();
-    if (key.starts_with(prefix)) {
-      Slice input = iter->value();
-      if (stat.DecodeFrom(&input) && GetLengthPrefixedSlice(&input, &name)) {
-        if (stats != NULL) {
-          stats->push_back(stat);
-        }
-        if (names != NULL) {
-          names->push_back(name.ToString());
-        }
-        num_entries++;
-      }
-    } else {
-      break;
-    }
-  }
-  delete iter;
-
-  return num_entries;
+  ReadOptions read_options;
+  read_options.verify_checksums = options_.verify_checksums;
+  read_options.fill_cache = false;
+  return LIST<Iterator, Key>(id, stats, names, &read_options, tx, limit);
 }
 
 bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
-  Status s;
-  Key key(KEY_INITIALIZER(id, kDirEntType));
-  key.SetHash(hash);
-  ReadOptions options;
-  options.verify_checksums = options_.verify_checksums;
-  options.limit = 0;
-  if (tx != NULL) {
-    options.snapshot = tx->snap;
-  }
-  Slice ignored;
-  char tmp[1];
-  s = db_->Get(options, key.Encode(), &ignored, tmp, sizeof(tmp));
-  assert(!s.IsBufferFull());
-  if (!s.ok()) {
-    return false;
-  } else {
-    return true;
-  }
+  ReadOptions read_options;
+  read_options.verify_checksums = options_.verify_checksums;
+  read_options.fill_cache = options_.fill_cache;
+  // No need to read any prefix of the value
+  read_options.limit = 0;
+  Status s = EXISTS<Key>(id, hash, &read_options, tx);
+  return s.ok();
 }
 
 }  // namespace pdlfs
