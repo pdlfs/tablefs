@@ -66,24 +66,33 @@ class Key {
 
 // Common inode structure shared by deltafs, indexfs, and tablefs.
 class Stat {
-  char modify_time_[8];  // Absolute time in microseconds
-  char change_time_[8];  // Absolute time in microseconds
-  char zeroth_server_[4];
-  char file_mode_[4];  // File type and access modes
-  char group_id_[4];
-  char user_id_[4];
-  char file_size_[8];
-  char file_ino_[8];
-  char snap_id_[8];
+#if defined(DELTAFS)
   char reg_id_[8];
+  char snap_id_[8];
+#endif
+  char file_ino_[8];
+  char file_size_[8];
+  char file_mode_[4];  // File type and access modes
+#if defined(DELTAFS) || defined(INDEXFS)
+  char zeroth_server_[4];
+#endif
+  char user_id_[4];
+  char group_id_[4];
+  // Absolute time in microseconds
+  char modify_time_[8];
+  char change_time_[8];
 
 #ifndef NDEBUG
+#if defined(DELTAFS)
   bool is_reg_id_set_;
   bool is_snap_id_set_;
+#endif
   bool is_file_ino_set_;
   bool is_file_size_set_;
   bool is_file_mode_set_;
+#if defined(DELTAFS) || defined(INDEXFS)
   bool is_zeroth_server_set_;
+#endif
   bool is_user_id_set_;
   bool is_group_id_set_;
   bool is_modify_time_set_;
@@ -91,31 +100,28 @@ class Stat {
 #endif
 
  public:
-  // scratch[...] should at least have sizeof(Stat) of bytes, although
+  enum { kMaxEncodedLength = 80 };
+  // scratch[...] should at least have kMaxEncodedLength of bytes, although
   // the real size used after encoding may be much smaller.
   Slice EncodeTo(char* scratch) const;
   // Return true if success, false otherwise.
   bool DecodeFrom(const Slice& encoding);
   bool DecodeFrom(Slice* input);
-
-  Stat() {
-#ifndef NDEBUG
-    memset(this, 0, sizeof(*this));
-#ifndef DELTAFS
-    SetRegId(0);
-    SetSnapId(0);
-#endif
-#endif
-  }
+  // Intentionally not initialized for performance.
+  Stat() {}
 
   void AssertAllSet() {
 #ifndef NDEBUG
+#if defined(DELTAFS)
     assert(is_reg_id_set_);
     assert(is_snap_id_set_);
+#endif
     assert(is_file_ino_set_);
     assert(is_file_size_set_);
     assert(is_file_mode_set_);
+#if defined(DELTAFS) || defined(INDEXFS)
     assert(is_zeroth_server_set_);
+#endif
     assert(is_user_id_set_);
     assert(is_group_id_set_);
     assert(is_modify_time_set_);
@@ -123,17 +129,22 @@ class Stat {
 #endif
   }
 
+#if defined(DELTAFS)
   uint64_t RegId() const { return DecodeFixed64(reg_id_); }
   uint64_t SnapId() const { return DecodeFixed64(snap_id_); }
+#endif
   uint64_t InodeNo() const { return DecodeFixed64(file_ino_); }
   uint64_t FileSize() const { return DecodeFixed64(file_size_); }
   uint32_t FileMode() const { return DecodeFixed32(file_mode_); }
+#if defined(DELTAFS) || defined(INDEXFS)
   uint32_t ZerothServer() const { return DecodeFixed32(zeroth_server_); }
+#endif
   uint32_t UserId() const { return DecodeFixed32(user_id_); }
   uint32_t GroupId() const { return DecodeFixed32(group_id_); }
   uint64_t ModifyTime() const { return DecodeFixed64(modify_time_); }
   uint64_t ChangeTime() const { return DecodeFixed64(change_time_); }
 
+#if defined(DELTAFS)
   void SetRegId(uint64_t reg_id) {
     EncodeFixed64(reg_id_, reg_id);
 #ifndef NDEBUG
@@ -147,6 +158,7 @@ class Stat {
     is_snap_id_set_ = true;
 #endif
   }
+#endif
 
   void SetInodeNo(uint64_t inode_no) {
     EncodeFixed64(file_ino_, inode_no);
@@ -169,12 +181,14 @@ class Stat {
 #endif
   }
 
+#if defined(DELTAFS) || defined(INDEXFS)
   void SetZerothServer(uint32_t server) {
     EncodeFixed32(zeroth_server_, server);
 #ifndef NDEBUG
     is_zeroth_server_set_ = true;
 #endif
   }
+#endif
 
   void SetUserId(uint32_t usr) {
     EncodeFixed32(user_id_, usr);
@@ -205,22 +219,28 @@ class Stat {
   }
 };
 
+#if defined(DELTAFS) || defined(INDEXFS)
 // The result of lookup requests sent to clients during pathname resolution.
 // If the lease due date is not zero, the client may cache
 // and reuse the result until the specified due. Not used in tablefs.
 class LookupStat {
-  char lease_due_[8];  // Absolute time in microseconds
-  char zeroth_server_[4];
-  char dir_mode_[4];
-  char group_id_[4];
-  char user_id_[4];
-  char dir_ino_[8];
-  char snap_id_[8];
+#if defined(DELTAFS)
   char reg_id_[8];
+  char snap_id_[8];
+#endif
+  char dir_ino_[8];
+  char dir_mode_[4];
+  char zeroth_server_[4];
+  char user_id_[4];
+  char group_id_[4];
+  // Absolute time in microseconds
+  char lease_due_[8];
 
 #ifndef NDEBUG
+#if defined(DELTAFS)
   bool is_reg_id_set_;
   bool is_snap_id_set_;
+#endif
   bool is_dir_ino_set_;
   bool is_dir_mode_set_;
   bool is_zeroth_server_set_;
@@ -230,27 +250,22 @@ class LookupStat {
 #endif
 
  public:
-  // scratch[...] should at least have sizeof(DirEntry) of bytes,
-  // although the real size used after encoding may be much smaller.
+  enum { kMaxEncodedLength = 60 };
+  // scratch[...] should at least have kMaxEncodedLength of bytes, although the
+  // real size used after encoding may be much smaller.
   Slice EncodeTo(char* scratch) const;
   // Return true if success, false otherwise
   bool DecodeFrom(const Slice& encoding);
   bool DecodeFrom(Slice* input);
-
-  LookupStat() {
-#ifndef NDEBUG
-    memset(this, 0, sizeof(*this));
-#ifndef DELTAFS
-    SetRegId(0);
-    SetSnapId(0);
-#endif
-#endif
-  }
+  // Intentionally not initialized for performance.
+  LookupStat() {}
 
   void AssertAllSet() {
 #ifndef NDEBUG
+#if defined(DELTAFS)
     assert(is_reg_id_set_);
     assert(is_snap_id_set_);
+#endif
     assert(is_dir_ino_set_);
     assert(is_dir_mode_set_);
     assert(is_zeroth_server_set_);
@@ -260,8 +275,10 @@ class LookupStat {
 #endif
   }
 
+#if defined(DELTAFS)
   uint64_t RegId() const { return DecodeFixed64(reg_id_); }
   uint64_t SnapId() const { return DecodeFixed64(snap_id_); }
+#endif
   uint64_t InodeNo() const { return DecodeFixed64(dir_ino_); }
   uint32_t DirMode() const { return DecodeFixed32(dir_mode_); }
   uint32_t ZerothServer() const { return DecodeFixed32(zeroth_server_); }
@@ -269,6 +286,7 @@ class LookupStat {
   uint32_t GroupId() const { return DecodeFixed32(group_id_); }
   uint64_t LeaseDue() const { return DecodeFixed64(lease_due_); }
 
+#if defined(DELTAFS)
   void SetRegId(uint64_t reg_id) {
     EncodeFixed64(reg_id_, reg_id);
 #ifndef NDEBUG
@@ -282,6 +300,7 @@ class LookupStat {
     is_snap_id_set_ = true;
 #endif
   }
+#endif
 
   void SetInodeNo(uint64_t inode_no) {
     EncodeFixed64(dir_ino_, inode_no);
@@ -327,5 +346,7 @@ class LookupStat {
 
   void CopyFrom(const Stat& stat);
 };
+
+#endif
 
 }  // namespace pdlfs
