@@ -45,10 +45,18 @@ set (TABLEFS_VERSION "${tfs-vers}.${TABLEFS_VERSION_PATCH}")
 configure_file ("../../include/tablefs/tablefs_config.h.in"
                 "../../include/tablefs/tablefs_config.h" @ONLY)
 
+if (TABLEFS_PORT_LEVELDB)
+    set (tablefs-port-srcs port/port_leveldb.cc)
+elseif (TABLEFS_PORT_KVRANGE)
+    set (tablefs-port-srcs port/port_kvrange.cc)
+else ()
+    set (tablefs-port-srcs port/port_default.cc)
+endif ()
+
 #
 # generate complete list of files and tests from the parts
 #
-set (tablefs-all-srcs ${tablefs-srcs})
+set (tablefs-all-srcs ${tablefs-port-srcs} ${tablefs-srcs})
 
 #
 # create the library target (user can specify shared vs. static
@@ -68,6 +76,17 @@ endif()
 if (CMAKE_THREAD_LIBS_INIT)
     target_link_libraries (tablefs "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
+
+if (TABLEFS_PORT_LEVELDB)
+    target_compile_definitions(tablefs PUBLIC "TABLEFS_PORT_LEVELDB")
+    find_package (Leveldb MODULE REQUIRED)
+    target_link_libraries(tablefs leveldb)
+elseif (TABLEFS_PORT_KVRANGE)
+    target_compile_definitions(tablefs PUBLIC "TABLEFS_PORT_KVRANGE")
+    find_package (Kvrange MODULE REQUIRED)
+    target_link_libraries(tablefs kvrange)
+endif ()
+
 set_target_properties(tablefs PROPERTIES VERSION ${TABLEFS_VERSION}
                       SOVERSION ${TABLEFS_VERSION_MAJOR})
 
@@ -115,6 +134,9 @@ install (EXPORT tablefs-targets
          DESTINATION ${tfs-pkg-loc})
 install (FILES "${CMAKE_CURRENT_BINARY_DIR}/tablefs-config.cmake"
                "${CMAKE_CURRENT_BINARY_DIR}/tablefs-config-version.cmake"
+         DESTINATION ${tfs-pkg-loc})
+install (FILES "../../cmake/FindLeveldb.cmake"
+               "../../cmake/FindKvrange.cmake"
          DESTINATION ${tfs-pkg-loc})
 install (DIRECTORY ../../include/tablefs
          DESTINATION include

@@ -32,11 +32,6 @@
 #     - GFLAGS_INCLUDE_DIR: optional hint for finding gflags/gflags.h
 #     - GFLAGS_LIBRARY_DIR: optional hint for finding gflags lib
 #   -DPDLFS_GLOG=ON                        -- use glog for logging
-#   -DPDLFS_MARGO_RPC=ON                   -- compile in margo rpc code
-#   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
-#   -DPDLFS_RADOS=ON                       -- compile in RADOS env
-#     - RADOS_INCLUDE_DIR: optional hint for finding rado/librados.h
-#     - RADOS_LIBRARY_DIR: optional hint for finding rados lib
 #   -DPDLFS_SNAPPY=ON                      -- compile in snappy compression
 #     - SNAPPY_INCLUDE_DIR: optional hint for finding snappy.h
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
@@ -62,7 +57,17 @@ project (TABLEFS)
 
 # add pdlfs-common cmake module directory to the path
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-     "${CMAKE_CURRENT_SOURCE_DIR}/external/pdlfs-common/cmake")
+        "${CMAKE_CURRENT_SOURCE_DIR}/external/pdlfs-common/cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# disable a subset of pdlfs modules that we don't need
+set (PDLFS_DFS_COMMON  "OFF" CACHE BOOL "Include common DFS code")
+set (PDLFS_SILT_ECT    "OFF" CACHE BOOL "Include SILT ECT code")
+set (PDLFS_MARGO_RPC   "OFF" CACHE BOOL "Use Margo RPC")
+set (PDLFS_MERCURY_RPC "OFF" CACHE BOOL "Use Mercury RPC")
+set (PDLFS_RADOS       "OFF" CACHE BOOL "Use RADOS OSD")
+mark_as_advanced(PDLFS_DFS_COMMON PDLFS_SILT_ECT PDLFS_MARGO_RPC
+                 PDLFS_MERCURY_RPC PDLFS_RADOS)
 
 #
 # we compile everything with -DTABLEFS by attaching it as a property of
@@ -105,6 +110,10 @@ include (cmake-options)
 
 # handle all the common PDLFS options using cmake/pdlfs-options.cmake
 include (pdlfs-options)
+
+# port tablefs to a different db backend
+set (TABLEFS_PORT_LEVELDB "OFF" CACHE BOOL "Port to LEVELDB")
+set (TABLEFS_PORT_KVRANGE "OFF" CACHE BOOL "Port to KVRANGE")
 
 # user hooks to configure tablefs
 set (TABLEFS_COMMON_INTREE "OFF" CACHE BOOL

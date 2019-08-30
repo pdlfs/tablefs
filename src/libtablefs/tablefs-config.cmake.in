@@ -4,6 +4,9 @@
 set (TABLEFS_REQUIRED_PACKAGES "@TABLEFS_REQUIRED_PACKAGES@")
 set (TABLEFS_ALL_COMPONENTS ${TABLEFS_REQUIRED_PACKAGES})
 
+set (TABLEFS_PORT_LEVELDB "@TABLEFS_PORT_LEVELDB@")
+set (TABLEFS_PORT_KVRANGE "@TABLEFS_PORT_KVRANGE@")
+
 # if you have depends, uncomment and add them: "find_dependency(Foo 2.4.1)"
 include (CMakeFindDependencyMacro)
 
@@ -19,6 +22,14 @@ foreach (comp ${tablefs_FIND_COMPONENTS})
                 "Specified unsupported component: ${comp}")
     endif()
 endforeach()
+
+# foreign db backend needed if we are port to it
+if (TABLEFS_PORT_LEVELDB)
+    find_dependency (Leveldb)
+endif ()
+if (TABLEFS_PORT_KVRANGE)
+    find_dependency (Kvrange)
+endif ()
 
 include ("${CMAKE_CURRENT_LIST_DIR}/tablefs-targets.cmake")
 
