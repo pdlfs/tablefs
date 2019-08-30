@@ -17,4 +17,34 @@
 #include <leveldb/status.h>
 #include <leveldb/write_batch.h>
 
-namespace pdlfs {}  // namespace pdlfs
+namespace pdlfs {
+
+// Options for controlling MDB behavior.
+struct MDBOptions {
+  ::leveldb::DB* db;
+  MDBOptions();
+};
+
+// An MDB implementation that binds to Leveldb.
+class MDB : public MXDB<::leveldb::DB, ::leveldb::Slice, ::leveldb::Status,
+                        kNameInKey> {
+ public:
+  struct Tx;
+  explicit MDB(const MDBOptions& options);
+  ~MDB();
+
+  Status Get(const DirId& id, const Slice& fname, Stat* stat);
+  Status Set(const DirId& id, const Slice& fname, const Stat& stat);
+  Status Delete(const DirId& id, const Slice& fname);
+
+  typedef MXDB::Dir<::leveldb::Iterator> Dir;
+  Dir* Opendir(const DirId& id);
+  Status Readdir(Dir* dir, Stat* stat, std::string* name);
+  void Closedir(Dir* dir);
+
+ private:
+  void operator=(const MDB&);
+  MDB(const MDB&);
+};
+
+}  // namespace pdlfs
