@@ -15,7 +15,7 @@
 include (FindPackageHandleStandardArgs)
 
 find_path (KVRANGE_INCLUDE kvrange/db.h HINTS ${KVRANGE_INCLUDE_DIR})
-find_library (KVRANGE_LIBRARY kvrange HINTS ${KVRANGE_LIBRARY})
+find_library (KVRANGE_LIBRARY kvrangedb HINTS ${KVRANGE_LIBRARY})
 
 find_package_handle_standard_args (Kvrange DEFAULT_MSG
         KVRANGE_INCLUDE KVRANGE_LIBRARY)
