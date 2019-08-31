@@ -17,7 +17,7 @@ MDBOptions::MDBOptions() : db(NULL) {}
 
 struct ReadOptions2 : public ::kvrangedb::ReadOptions {
   ReadOptions2() : ReadOptions(), snap(NULL) {}
-  void* snap;
+  void* snapshot;
 };
 
 struct MDB::Tx {
