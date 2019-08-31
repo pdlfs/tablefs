@@ -16,7 +16,7 @@ namespace pdlfs {
 MDBOptions::MDBOptions() : db(NULL) {}
 
 struct ReadOptions2 : public ::kvrangedb::ReadOptions {
-  ReadOptions2() : ReadOptions(), snap(NULL) {}
+  ReadOptions2() : ReadOptions(), snapshot(NULL) {}
   void* snapshot;
 };
 
