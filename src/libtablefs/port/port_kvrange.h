@@ -26,10 +26,10 @@ struct MDBOptions {
   MDBOptions();
 };
 
-// An MDB implementation that binds to KVRANGEDB. KVRANGEDB is a custom
-// B-Tree implementation supporting range queries atop KVSSD by storing a
-// secondary ordered key index in device. KVRANGEDB is built at LANL.
-//   https://github.com/celeryfake/kvrangedb
+// An MXDB instantiation that binds to KVRANGEDB. KVRANGEDB is a custom B-Tree
+// implementation supporting range queries atop KVSSD through storing a
+// secondary ordered key index in the KVSSD device. KVRANGEDB is a LANL research
+// project. https://github.com/celeryfake/kvrangedb
 class MDB : public MXDB<::kvrangedb::DB, ::kvrangedb::Slice,
                         ::kvrangedb::Status, kNameInKey> {
  public:

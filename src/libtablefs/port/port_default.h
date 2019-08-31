@@ -20,7 +20,7 @@ struct MDBOptions {
   DB* db;
 };
 
-// An MDB implementation that binds to our own DB implementation. Our DB is a
+// An MXDB instantiation that binds to our own DB implementation. Our DB is a
 // modified LevelDB realization of a LSM-Tree.
 class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
  public:
