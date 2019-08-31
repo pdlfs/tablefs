@@ -26,7 +26,8 @@ struct MDBOptions {
   MDBOptions();
 };
 
-// An MDB implementation that binds to Leveldb.
+// An MDB implementation that binds to Leveldb. Leveldb is Google's
+// open-source realization of a LSM-Tree.
 class MDB : public MXDB<::leveldb::DB, ::leveldb::Slice, ::leveldb::Status,
                         kNameInKey> {
  public:
