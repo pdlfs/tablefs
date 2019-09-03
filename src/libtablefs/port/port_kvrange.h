@@ -33,13 +33,13 @@ struct MDBOptions {
 class MDB : public MXDB<::kvrangedb::DB, ::kvrangedb::Slice,
                         ::kvrangedb::Status, kNameInKey> {
  public:
-  struct Tx;
+  typedef ::kvrangedb::DB Db;
   explicit MDB(const MDBOptions& options);
   ~MDB();
 
-  Status Get(const DirId& id, const Slice& fname, Stat* stat);
-  Status Set(const DirId& id, const Slice& fname, const Stat& stat);
-  Status Delete(const DirId& id, const Slice& fname);
+  Status Get(const DirId& id, const Slice& name, Stat* stat);
+  Status Set(const DirId& id, const Slice& name, const Stat& stat);
+  Status Delete(const DirId& id, const Slice& name);
 
   typedef MXDB::Dir<::kvrangedb::Iterator> Dir;
   Dir* Opendir(const DirId& id);
@@ -49,6 +49,8 @@ class MDB : public MXDB<::kvrangedb::DB, ::kvrangedb::Slice,
  private:
   void operator=(const MDB&);
   MDB(const MDB&);
+
+  struct Tx;
 };
 
 }  // namespace pdlfs
