@@ -45,11 +45,11 @@ class FilesystemTest {
 
   Status Exist(const char* path) {  ///
     Stat ignored;
-    return fs_->Fstat(me, NULL, path, &ignored);
+    return fs_->Lstat(me, NULL, path, &ignored);
   }
 
   Status Creat(const char* path) {  ///
-    return fs_->Creat(me, NULL, path, 0660);
+    return fs_->Mkfil(me, NULL, path, 0660);
   }
 
   Status Mkdir(const char* path) {  ///

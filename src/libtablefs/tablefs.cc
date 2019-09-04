@@ -14,7 +14,7 @@
 
 namespace pdlfs {
 
-Status Filesystem::Fstat(  ///
+Status Filesystem::Lstat(  ///
     const User& who, const Stat* at, const char* const pathname,
     Stat* const stat) {
   bool has_tailing_slashes(false);
@@ -90,7 +90,7 @@ Status Filesystem::Mkdir(  ///
   return status;
 }
 
-Status Filesystem::Creat(  ///
+Status Filesystem::Mkfil(  ///
     const User& who, const Stat* at, const char* const pathname,
     uint32_t mode) {
   bool has_tailing_slashes(false);
@@ -115,8 +115,9 @@ Status Filesystem::Creat(  ///
 }
 
 Status Filesystem::Resolu(  ///
-    const User& who, const Stat& at, const char* pathname, Stat* parent_dir,
-    Slice* last_component, bool* has_tailing_slashes) {
+    const User& who, const Stat& at, const char* const pathname,
+    Stat* parent_dir, Slice* last_component,  ///
+    bool* has_tailing_slashes) {
 #define PATH_SGMT(pathname, remaining_path) \
   Slice(pathname, remaining_path - pathname)
   const char* remaining_path(NULL);
