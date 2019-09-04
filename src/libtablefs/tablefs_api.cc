@@ -68,7 +68,7 @@ void SetErrno(const pdlfs::Status& s) {
 
 extern "C" {
 struct tablefs {
-  pdlfs::FilesystemOptions options;
+  pdlfs::FilesystemOptions* fsopts;
   pdlfs::Filesystem* fs;
   pdlfs::User me;
 };
@@ -94,6 +94,38 @@ int DirError(tablefs_dir_t* dh, const pdlfs::Status& s) {
 }  // namespace
 
 extern "C" {
+
+tablefs_t* tablefs_newfshdl() {
+  tablefs_t* h = static_cast<tablefs_t*>(malloc(sizeof(struct tablefs)));
+  h->fsopts = new pdlfs::FilesystemOptions;
+  h->fs = new pdlfs::Filesystem(*h->fsopts);
+  h->me.uid = getuid();
+  h->me.gid = getgid();
+  return h;
+}
+
+int tablefs_openfs(tablefs_t* h, const char* fsloc) {
+  pdlfs::Status status;
+  if (!h) {
+    status = BadArgs();
+  } else {
+    status = h->fs->OpenFilesystem(fsloc);
+  }
+
+  if (!status.ok()) {
+    return FilesystemError(h, status);
+  } else {
+    return 0;
+  }
+}
+
+int tablefs_closefs(tablefs_t* h) {
+  if (h) {
+    delete h->fsopts;
+    delete h->fs;
+    free(h);
+  }
+}
 
 int tablefs_mkfil(tablefs_t* h, const char* path, uint32_t mode) {
   pdlfs::Status status;
