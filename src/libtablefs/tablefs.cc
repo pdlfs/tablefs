@@ -348,6 +348,19 @@ FilesystemOptions::FilesystemOptions()
 Filesystem::Filesystem(const FilesystemOptions& options)
     : options_(options), db_(NULL), mdb_(NULL) {}
 
+namespace {
+void InitializeFilesystem(Stat* const root) {
+  root->SetInodeNo(0);
+  root->SetFileSize(0);
+  root->SetFileMode(ACCESSPERMS | S_ISVTX);
+  root->SetUserId(0);
+  root->SetGroupId(0);
+  root->SetModifyTime(0);
+  root->SetChangeTime(0);
+  root->AssertAllSet();
+}
+}  // namespace
+
 Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   MDB::DbOpts dbopts;
   dbopts.create_if_missing = true;
@@ -358,7 +371,11 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   }
   mdb_ = new MDB(MDBOptions(db_));
   status = mdb_->LoadFsroot(&tmp);
-  if (status.ok()) {
+  if (status.IsNotFound()) {  // This is a new fs image
+    InitializeFilesystem(&r_.rootstat);
+    r_.inoseq = 2;
+    status = Status::OK();
+  } else if (status.ok()) {
     if (!r_.DecodeFrom(tmp)) {
       status = Status::Corruption("Cannot recover fs root");
     }

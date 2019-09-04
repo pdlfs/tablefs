@@ -35,7 +35,7 @@ class FilesystemTest {
   Filesystem* fs_;
 };
 
-TEST(FilesystemTest, Open) {  ///
+TEST(FilesystemTest, OpenFs) {  ///
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
 }
 
