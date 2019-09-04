@@ -15,6 +15,7 @@
 #include "pdlfs-common/testharness.h"
 
 #include <sys/stat.h>
+#include <set>
 
 namespace pdlfs {
 
@@ -28,12 +29,31 @@ class FilesystemTest {
     me.gid = 1;
   }
 
-  Status Fstat(const char* filename, Stat* stat) {  ///
-    return fs_->Fstat(me, NULL, filename, stat);
+  void Listdir(FilesystemDir* dir, std::set<std::string>* set) {
+    Status status;
+    std::string name;
+    Stat tmp;
+    while (true) {
+      status = fs_->Readdir(dir, &tmp, &name);
+      if (status.ok()) {
+        set->insert(name);
+      } else {
+        break;
+      }
+    }
   }
 
-  Status Creat(const char* filename) {  ///
-    return fs_->Creat(me, NULL, filename, 0660);
+  Status Exist(const char* path) {  ///
+    Stat ignored;
+    return fs_->Fstat(me, NULL, path, &ignored);
+  }
+
+  Status Creat(const char* path) {  ///
+    return fs_->Creat(me, NULL, path, 0660);
+  }
+
+  Status Mkdir(const char* path) {  ///
+    return fs_->Mkdir(me, NULL, path, 0770);
   }
 
   ~FilesystemTest() {
@@ -50,9 +70,15 @@ class FilesystemTest {
 
 TEST(FilesystemTest, OpenFs) {
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Exist("/"));
+  ASSERT_OK(Exist("//"));
+  ASSERT_OK(Exist("///"));
   delete fs_;
   fs_ = new Filesystem(options_);
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Exist("/"));
+  ASSERT_OK(Exist("//"));
+  ASSERT_OK(Exist("///"));
 }
 
 TEST(FilesystemTest, Files) {
@@ -60,13 +86,83 @@ TEST(FilesystemTest, Files) {
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
   ASSERT_OK(Creat("/1"));
   ASSERT_CONFLICT(Creat("/1"));
-  ASSERT_OK(Fstat("/1", &tmp));
-  ASSERT_OK(Fstat("//1", &tmp));
-  ASSERT_OK(Fstat("///1", &tmp));
-  ASSERT_ERR(Fstat("/1/", &tmp));
-  ASSERT_ERR(Fstat("//1//", &tmp));
-  ASSERT_NOTFOUND(Fstat("/2", &tmp));
+  ASSERT_OK(Exist("/1"));
+  ASSERT_OK(Exist("//1"));
+  ASSERT_OK(Exist("///1"));
+  ASSERT_ERR(Exist("/1/"));
+  ASSERT_ERR(Exist("//1//"));
+  ASSERT_NOTFOUND(Exist("/2"));
   ASSERT_OK(Creat("/2"));
+}
+
+TEST(FilesystemTest, Dirs) {
+  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_CONFLICT(Mkdir("/1"));
+  ASSERT_CONFLICT(Creat("/1"));
+  ASSERT_OK(Exist("/1"));
+  ASSERT_OK(Exist("/1/"));
+  ASSERT_OK(Exist("//1"));
+  ASSERT_OK(Exist("//1//"));
+  ASSERT_OK(Exist("///1"));
+  ASSERT_OK(Exist("///1///"));
+  ASSERT_NOTFOUND(Exist("/2"));
+  ASSERT_OK(Mkdir("/2"));
+}
+
+TEST(FilesystemTest, Subdirs) {
+  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/a"));
+  ASSERT_CONFLICT(Mkdir("/1/a"));
+  ASSERT_CONFLICT(Creat("/1/a"));
+  ASSERT_OK(Exist("/1/a"));
+  ASSERT_OK(Exist("/1/a/"));
+  ASSERT_OK(Exist("//1//a"));
+  ASSERT_OK(Exist("//1//a//"));
+  ASSERT_OK(Exist("///1///a"));
+  ASSERT_OK(Exist("///1///a///"));
+  ASSERT_NOTFOUND(Exist("/1/b"));
+  ASSERT_OK(Mkdir("/1/b"));
+}
+
+TEST(FilesystemTest, Listdir1) {
+  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Creat("/1"));
+  ASSERT_OK(Mkdir("/2"));
+  ASSERT_OK(Creat("/3"));
+  ASSERT_OK(Mkdir("/4"));
+  ASSERT_OK(Creat("/5"));
+  FilesystemDir* dir;
+  ASSERT_OK(fs_->Opendir(me, NULL, "/", &dir));
+  std::set<std::string> set;
+  Listdir(dir, &set);
+  ASSERT_TRUE(set.count("1") == 1);
+  ASSERT_TRUE(set.count("2") == 1);
+  ASSERT_TRUE(set.count("3") == 1);
+  ASSERT_TRUE(set.count("4") == 1);
+  ASSERT_TRUE(set.count("5") == 1);
+  ASSERT_OK(fs_->Closdir(dir));
+}
+
+TEST(FilesystemTest, Listdir2) {
+  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Creat("/1/a"));
+  ASSERT_OK(Mkdir("/1/b"));
+  ASSERT_OK(Creat("/1/c"));
+  ASSERT_OK(Mkdir("/1/d"));
+  ASSERT_OK(Creat("/1/e"));
+  FilesystemDir* dir;
+  ASSERT_OK(fs_->Opendir(me, NULL, "/1", &dir));
+  std::set<std::string> set;
+  Listdir(dir, &set);
+  ASSERT_TRUE(set.count("a") == 1);
+  ASSERT_TRUE(set.count("b") == 1);
+  ASSERT_TRUE(set.count("c") == 1);
+  ASSERT_TRUE(set.count("d") == 1);
+  ASSERT_TRUE(set.count("e") == 1);
+  ASSERT_OK(fs_->Closdir(dir));
 }
 
 }  // namespace pdlfs
