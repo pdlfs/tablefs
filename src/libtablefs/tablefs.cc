@@ -14,6 +14,28 @@
 
 namespace pdlfs {
 
+Status Filesystem::Fstat(  ///
+    const User& who, const Stat* at, const char* const pathname,
+    Stat* const stat) {
+  bool has_tailing_slashes(false);
+  if (!at) at = &r_.rootstat;
+  Stat parent_dir;
+  Slice tgt;
+  Status status =
+      Resolu(who, *at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!tgt.empty()) {
+    status = Lookup(who, parent_dir, tgt, 0, stat);
+  } else {  // Special case in which path is a root
+    *stat = r_.rootstat;
+  }
+
+  return status;
+}
+
 Status Filesystem::Opendir(  ///
     const User& who, const Stat* at, const char* const pathname,
     FilesystemDir** dir) {
@@ -106,7 +128,8 @@ Status Filesystem::Resolu(  ///
     return status;
   }
 
-  if ((*last_component)[last_component->size()] == '/')
+  const char* const p = last_component->data();
+  if (p[last_component->size()] == '/')  ///
     *has_tailing_slashes = true;
 
   return status;
@@ -204,8 +227,12 @@ Status Filesystem::Resolv(  ///
     // E.g., "/", "/a/b", "/aa/bb/cc/dd".
     //        ||     | |         |  |
     //        pq     p q         p  q
-    q = strchr(p + 1, '/');
-    if (!q) {
+    for (q = p + 1; q[0]; q++) {
+      if (q[0] == '/') {
+        break;
+      }
+    }
+    if (!q[0]) {  // End of path
       break;
     }
     // This skips empty names in the beginning of a path.
@@ -223,12 +250,12 @@ Status Filesystem::Resolv(  ///
     //          | ||       | |    |
     //          p qc       p q    c
     const char* c = q + 1;
-    for (; c; c++) {
+    for (; c[0]; c++) {
       if (c[0] != '/') {
         break;
       }
     }
-    if (!c) {  // End of path
+    if (!c[0]) {  // End of path
       break;
     }
     current_name = Slice(p + 1, q - p - 1);
