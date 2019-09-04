@@ -382,7 +382,7 @@ namespace {
 void InitializeFilesystem(Stat* const root) {
   root->SetInodeNo(0);
   root->SetFileSize(0);
-  root->SetFileMode(ACCESSPERMS | S_ISVTX);
+  root->SetFileMode(S_IFDIR | S_ISVTX | ACCESSPERMS);
   root->SetUserId(0);
   root->SetGroupId(0);
   root->SetModifyTime(0);
