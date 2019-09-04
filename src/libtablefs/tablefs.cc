@@ -342,7 +342,7 @@ Status Filesystem::Getdir(  ///
     status = mdb_->Get(pdir, name, &tmp);
     if (!status.ok()) {
       return status;
-    } else if (!S_ISDIR(stat->FileMode())) {  // Must be a dir
+    } else if (!S_ISDIR(tmp.FileMode())) {  // Must be a dir
       return Status::DirExpected(Slice());
     }
     stat = &tmp;
