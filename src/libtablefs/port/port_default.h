@@ -16,7 +16,7 @@ namespace pdlfs {
 
 // Options for controlling MDB behavior.
 struct MDBOptions {
-  MDBOptions();
+  explicit MDBOptions(DB* db);
   DB* db;
 };
 
@@ -24,9 +24,13 @@ struct MDBOptions {
 // modified LevelDB realization of a LSM-Tree.
 class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
  public:
+  typedef DBOptions DbOpts;
   typedef DB Db;
   explicit MDB(const MDBOptions& options);
   ~MDB();
+
+  Status SaveFsroot(const Slice& encoding);
+  Status LoadFsroot(std::string* tmp);
 
   Status Get(const DirId& id, const Slice& name, Stat* stat);
   Status Set(const DirId& id, const Slice& name, const Stat& stat);

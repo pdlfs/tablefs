@@ -14,7 +14,7 @@
 
 namespace pdlfs {
 
-Status Filesystem::Opend(  ///
+Status Filesystem::Opendir(  ///
     const User& who, const Stat* at, const char* const pathname,
     FilesystemDir** dir) {
   bool has_tailing_slashes(false);
@@ -32,13 +32,13 @@ Status Filesystem::Opend(  ///
   return status;
 }
 
-Status Filesystem::Readr(  ///
+Status Filesystem::Readdir(  ///
     FilesystemDir* dir, Stat* stat, std::string* name) {
   MDB::Dir* d = reinterpret_cast<MDB::Dir*>(dir);
   return mdb_->Readdir(d, stat, name);
 }
 
-Status Filesystem::Close(FilesystemDir* dir) {
+Status Filesystem::Closdir(FilesystemDir* dir) {
   MDB::Dir* d = reinterpret_cast<MDB::Dir*>(dir);
   mdb_->Closedir(d);
   return Status::OK();
@@ -322,6 +322,59 @@ Status Filesystem::Getdir(  ///
   } else {
     *dir = reinterpret_cast<FilesystemDir*>(mdb_->Opendir(DirId(*stat)));
     return status;
+  }
+}
+
+Slice FilesystemRoot::EncodeTo(char* scratch) const {
+  Slice en = rootstat.EncodeTo(scratch);
+  char* p = EncodeVarint64(scratch + en.size(), inoseq);
+  return Slice(scratch, p - scratch);
+}
+
+bool FilesystemRoot::DecodeFrom(const Slice& encoding) {
+  Slice input = encoding;
+  return DecodeFrom(&input);
+}
+
+bool FilesystemRoot::DecodeFrom(Slice* input) {
+  if (!rootstat.DecodeFrom(input))  ///
+    return false;
+  return GetVarint64(input, &inoseq);
+}
+
+FilesystemOptions::FilesystemOptions()
+    : skip_name_collision_checks(false), skip_perm_checks(false) {}
+
+Filesystem::Filesystem(const FilesystemOptions& options)
+    : options_(options), db_(NULL), mdb_(NULL) {}
+
+Status Filesystem::OpenFilesystem(const std::string& fsloc) {
+  MDB::DbOpts dbopts;
+  dbopts.create_if_missing = true;
+  std::string tmp;
+  Status status = MDB::Db::Open(dbopts, fsloc, &db_);
+  if (!status.ok()) {
+    return status;
+  }
+  mdb_ = new MDB(MDBOptions(db_));
+  status = mdb_->LoadFsroot(&tmp);
+  if (status.ok()) {
+    if (!r_.DecodeFrom(tmp)) {
+      status = Status::Corruption("Cannot recover fs root");
+    }
+  }
+  return status;
+}
+
+Filesystem::~Filesystem() {
+  char tmp[200];
+  if (mdb_) {
+    Slice encoding = r_.EncodeTo(tmp);
+    mdb_->SaveFsroot(encoding);
+    delete mdb_;
+  }
+  if (db_) {
+    delete db_;
   }
 }
 

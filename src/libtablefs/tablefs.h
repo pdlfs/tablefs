@@ -28,7 +28,12 @@ struct FilesystemOptions {
 // Root information of a filesystem (superblock).
 struct FilesystemRoot {
   FilesystemRoot() {}  // Intentionally not initialized for performance.
-  void EncodeTo(std::string* dst);
+  // Encode state into a buf space.
+  Slice EncodeTo(char* scratch) const;
+  // Recover state from a given encoding string.
+  // Return True on success, False otherwise.
+  bool DecodeFrom(const Slice& encoding);
+  bool DecodeFrom(Slice* input);
 
   uint64_t inoseq;
   Stat rootstat;
@@ -42,17 +47,20 @@ struct User {
 
 class Filesystem {
  public:
+  explicit Filesystem(const FilesystemOptions& options);
   ~Filesystem();
+
+  Status OpenFilesystem(const std::string& fsloc);
 
   Status Creat(const User& who, const Stat* at, const char* pathname,
                uint32_t mode);
   Status Mkdir(const User& who, const Stat* at, const char* pathname,
                uint32_t mode);
 
-  Status Opend(const User& who, const Stat* at, const char* pathname,
-               FilesystemDir**);
-  Status Readr(FilesystemDir* dir, Stat* stat, std::string* name);
-  Status Close(FilesystemDir* dir);
+  Status Opendir(const User& who, const Stat* at, const char* pathname,
+                 FilesystemDir**);
+  Status Readdir(FilesystemDir* dir, Stat* stat, std::string* name);
+  Status Closdir(FilesystemDir* dir);
 
  private:
   Status Resolu(const User& who, const Stat& at, const char* pathname,
@@ -71,6 +79,10 @@ class Filesystem {
   // Return OK and the stat of the newly created filesystem node on success.
   Status Insert(const User& who, const Stat& parent_dir, const Slice& name,
                 uint32_t mode, Stat* stat);
+
+  // No copying allowed
+  void operator=(const Filesystem& fs);
+  Filesystem(const Filesystem&);
 
   FilesystemRoot r_;
   FilesystemOptions options_;

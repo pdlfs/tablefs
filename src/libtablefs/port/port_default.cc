@@ -13,7 +13,7 @@
 
 namespace pdlfs {
 
-MDBOptions::MDBOptions() : db(NULL) {}
+MDBOptions::MDBOptions(DB* db) : db(db) {}
 
 struct MDB::Tx {
   const Snapshot* snap;
@@ -23,6 +23,14 @@ struct MDB::Tx {
 MDB::MDB(const MDBOptions& options) : MXDB(options.db) {}
 
 MDB::~MDB() {}
+
+Status MDB::SaveFsroot(const Slice& encoding) {
+  return dx_->Put(WriteOptions(), "/", encoding);
+}
+
+Status MDB::LoadFsroot(std::string* tmp) {
+  return dx_->Get(ReadOptions(), "/", tmp);
+}
 
 Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
   ReadOptions read_opts;
