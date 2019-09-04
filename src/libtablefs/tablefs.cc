@@ -28,7 +28,9 @@ Status Filesystem::Fstat(  ///
   }
 
   if (!tgt.empty()) {
-    status = Lookup(who, parent_dir, tgt, 0, stat);
+    const uint32_t mode =
+        has_tailing_slashes ? S_IFDIR : 0;  // Target must be a dir
+    status = Lookup(who, parent_dir, tgt, mode, stat);
   } else {  // Special case in which path is a root
     *stat = r_.rootstat;
   }
@@ -240,6 +242,7 @@ Status Filesystem::Resolv(  ///
     //         ||    ||        ||
     //         pq    pq        pq
     if (q - p - 1 == 0) {
+      p = q;  // I.e., p++
       continue;
     }
     // Look ahead and skip repeated slashes. E.g., "//a//b", "/a/bb////cc".
