@@ -15,6 +15,7 @@
 
 # main directory sources and tests
 set (tablefs-srcs tablefs.cc)
+set (tablefs-tests tablefs_test.cc)
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)
@@ -57,6 +58,7 @@ endif ()
 # generate complete list of files and tests from the parts
 #
 set (tablefs-all-srcs ${tablefs-port-srcs} ${tablefs-srcs})
+set (tablefs-all-tests ${tablefs-tests})
 
 #
 # create the library target (user can specify shared vs. static
@@ -144,4 +146,20 @@ install (DIRECTORY ../../include/tablefs
 install (FILES
    "${CMAKE_CURRENT_BINARY_DIR}/../../include/tablefs/tablefs_config.h"
    DESTINATION include/tablefs)
+
+#
+# tests... we EXCLUDE_FROM_ALL the tests and use pdlfs-options.cmake's
+# pdl-build-tests target for building.
+#
+foreach (lcv ${tablefs-all-tests})
+
+    # use basename as test name
+    get_filename_component (id ${lcv} NAME_WE)
+
+    add_executable (${id} EXCLUDE_FROM_ALL ${lcv})
+    target_link_libraries (${id} tablefs)
+    add_test (${id} ${id})
+    add_dependencies (pdl-build-tests ${id})
+
+endforeach ()
 

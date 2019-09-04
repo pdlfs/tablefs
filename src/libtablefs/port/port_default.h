@@ -24,6 +24,8 @@ struct MDBOptions {
 // modified LevelDB realization of a LSM-Tree.
 class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
  public:
+  // XXX: The DestroyDb port is a bit too hacky!
+#define DestroyDb(x, y) DestroyDB(x, y)  // Remove the contents of a DB
   typedef DBOptions DbOpts;
   typedef DB Db;
   explicit MDB(const MDBOptions& options);
