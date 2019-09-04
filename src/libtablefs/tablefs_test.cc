@@ -126,6 +126,26 @@ TEST(FilesystemTest, Subdirs) {
   ASSERT_OK(Mkdir("/1/b"));
 }
 
+TEST(FilesystemTest, Resolv) {
+  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/2"));
+  ASSERT_OK(Mkdir("/1/2/3"));
+  ASSERT_OK(Mkdir("/1/2/3/4"));
+  ASSERT_OK(Mkdir("/1/2/3/4/5"));
+  ASSERT_OK(Creat("/1/2/3/4/5/6"));
+  ASSERT_OK(Exist("/1"));
+  ASSERT_OK(Exist("/1/2"));
+  ASSERT_OK(Exist("/1/2/3"));
+  ASSERT_OK(Exist("/1/2/3/4"));
+  ASSERT_OK(Exist("/1/2/3/4/5"));
+  ASSERT_ERR(Exist("/1/2/3/4/5/6/"));
+  ASSERT_ERR(Exist("/2/3"));
+  ASSERT_ERR(Exist("/1/2/4/5"));
+  ASSERT_ERR(Exist("/1/2/3/5"));
+  ASSERT_ERR(Creat("/1/2/3/4/5/6/7"));
+}
+
 TEST(FilesystemTest, Listdir1) {
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
   ASSERT_OK(Creat("/1"));
