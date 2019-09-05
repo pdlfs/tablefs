@@ -82,20 +82,27 @@ void SetErrno(const pdlfs::Status& s) {
 }
 }  // namespace
 
-extern "C" {
+/*
+ * handle to an open filesystem instance.
+ */
 struct tablefs {
   pdlfs::FilesystemOptions* fsopts;
   pdlfs::Filesystem* fs;
   pdlfs::User me;
 };
 
+/*
+ * handle to an open dir.
+ */
 struct tablefs_dir {
   struct dirent buf;
   pdlfs::FilesystemDir* dir;
   tablefs_t* h;
 };
-}
 
+/*
+ * common utilities supporting api functions.
+ */
 namespace {
 inline void SetTimespec(struct timespec* const ts, uint64_t micros) {
   if (micros >= 1000000) {
