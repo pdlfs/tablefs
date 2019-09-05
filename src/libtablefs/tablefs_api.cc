@@ -36,10 +36,6 @@
 #include "tablefs.h"
 
 #include <errno.h>
-#ifndef EHOSTUNREACH
-#define EHOSTUNREACH ENODEV
-#endif
-
 #ifndef ENOSYS
 #define ENOSYS EPERM
 #endif
@@ -80,8 +76,6 @@ void SetErrno(const pdlfs::Status& s) {
     errno = EINVAL;
   } else if (s.IsBufferFull()) {
     errno = ENOBUFS;
-  } else if (s.IsRange()) {
-    errno = ERANGE;
   } else {
     errno = EIO;
   }
