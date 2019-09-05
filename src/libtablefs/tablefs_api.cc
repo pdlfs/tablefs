@@ -158,6 +158,7 @@ int tablefs_closefs(tablefs_t* h) {
     delete h->fs;
     free(h);
   }
+  return 0;
 }
 
 int tablefs_mkfil(tablefs_t* h, const char* path, uint32_t mode) {
