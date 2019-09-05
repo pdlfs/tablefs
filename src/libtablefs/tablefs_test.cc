@@ -43,17 +43,17 @@ class FilesystemTest {
     }
   }
 
-  Status Exist(const char* path) {  ///
+  Status Exist(const char* path, const Stat* at = NULL) {
     Stat ignored;
-    return fs_->Lstat(me, NULL, path, &ignored);
+    return fs_->Lstat(me, at, path, &ignored);
   }
 
-  Status Creat(const char* path) {  ///
-    return fs_->Mkfil(me, NULL, path, 0660);
+  Status Creat(const char* path, const Stat* at = NULL) {
+    return fs_->Mkfil(me, at, path, 0660);
   }
 
-  Status Mkdir(const char* path) {  ///
-    return fs_->Mkdir(me, NULL, path, 0770);
+  Status Mkdir(const char* path, const Stat* at = NULL) {
+    return fs_->Mkdir(me, at, path, 0770);
   }
 
   ~FilesystemTest() {
