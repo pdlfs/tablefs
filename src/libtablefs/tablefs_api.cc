@@ -36,7 +36,6 @@
 #include "tablefs.h"
 
 #include <errno.h>
-
 #ifndef EHOSTUNREACH
 #define EHOSTUNREACH ENODEV
 #endif
@@ -104,6 +103,15 @@ struct tablefs_dir {
 }
 
 namespace {
+inline void SetTimespec(struct timespec* const ts, uint64_t micros) {
+  if (micros >= 1000000) {
+    ts->tv_sec = micros / 1000000;
+    ts->tv_nsec = (micros - ts->tv_sec * 1000000) * 1000;
+  } else {
+    ts->tv_sec = 0;
+    ts->tv_nsec = micros * 1000;
+  }
+}
 // XXX: h may be NULL
 int FilesystemError(tablefs_t* h, const pdlfs::Status& s) {
   SetErrno(s);
@@ -194,10 +202,13 @@ int tablefs_lstat(tablefs_t* h, const char* path, struct stat* const buf) {
   } else if (!buf) {
     status = BadArgs();
   } else {
-    status = h->fs->Lstat(h->me, NULL, path, &stat);
+    status = h->fs->Lstat(h->me, NULL, path, &stat);  /// XXX: NO atime
     if (status.ok()) {
-      memset(buf, 0, sizeof(struct stat));
+      SetTimespec(&buf->st_atimespec, stat.ModifyTime());
+      SetTimespec(&buf->st_mtimespec, stat.ModifyTime());
+      SetTimespec(&buf->st_ctimespec, stat.ChangeTime());
       buf->st_ino = stat.InodeNo();
+      buf->st_size = stat.FileSize();
       buf->st_mode = stat.FileMode();
       buf->st_uid = stat.UserId();
       buf->st_gid = stat.GroupId();
@@ -229,7 +240,6 @@ tablefs_dir_t* tablefs_opendir(tablefs_t* h, const char* path) {
   } else {
     tablefs_dir_t* const dh =
         static_cast<tablefs_dir_t*>(malloc(sizeof(struct tablefs_dir)));
-    memset(&dh->buf, 0, sizeof(struct dirent));
     dh->dir = dir;
     dh->h = h;
     return dh;
@@ -252,11 +262,9 @@ struct dirent* tablefs_readdir(tablefs_dir_t* dh) {
     return NULL;
   } else {
     struct dirent* const buf = &dh->buf;
-    buf->d_ino = stat.InodeNo();
-    buf->d_type =  ///
-        S_ISDIR(stat.FileMode()) ? DT_DIR : DT_REG;
     strcpy(buf->d_name, entname.c_str());
-    buf->d_namlen = entname.size();
+    buf->d_type = IFTODT(stat.FileMode());
+    buf->d_ino = stat.InodeNo();
     return buf;
   }
 }
