@@ -28,6 +28,7 @@ class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
 #define DestroyDb(x, y) DestroyDB(x, y)  // Remove the contents of a DB
   typedef DBOptions DbOpts;
   typedef DB Db;
+  static Status Open(const DbOpts&, const std::string& dbloc, Db**);
   explicit MDB(const MDBOptions& options);
   ~MDB();
 

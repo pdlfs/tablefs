@@ -396,7 +396,7 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   MDB::DbOpts dbopts;
   dbopts.create_if_missing = true;
   std::string tmp;
-  Status status = MDB::Db::Open(dbopts, fsloc, &db_);
+  Status status = MDB::Open(dbopts, fsloc, &db_);
   if (!status.ok()) {
     return status;
   }

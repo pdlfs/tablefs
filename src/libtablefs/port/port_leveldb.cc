@@ -13,7 +13,7 @@
 
 namespace pdlfs {
 
-MDBOptions::MDBOptions() : db(NULL) {}
+MDBOptions::MDBOptions(::leveldb::DB* db) : db(db) {}
 
 struct MDB::Tx {
   const ::leveldb::Snapshot* snap;
@@ -23,6 +23,38 @@ struct MDB::Tx {
 MDB::MDB(const MDBOptions& options) : MXDB(options.db) {}
 
 MDB::~MDB() {}
+
+Status MDB::Open(const DbOpts& dbopts, const std::string& dbloc, Db** dbptr) {
+  ::leveldb::Status status = Db::Open(dbopts, dbloc, dbptr);
+  if (!status.ok()) {
+    return Status::IOError(status.ToString());
+  } else {
+    return Status::OK();
+  }
+}
+
+Status MDB::SaveFsroot(const Slice& encoding) {
+  ::leveldb::Status status =
+      dx_->Put(::leveldb::WriteOptions(), "/",
+               ::leveldb::Slice(encoding.data(), encoding.size()));
+  if (!status.ok()) {
+    return Status::IOError(status.ToString());
+  } else {
+    return Status::OK();
+  }
+}
+
+Status MDB::LoadFsroot(std::string* tmp) {
+  ::leveldb::Status status =  ///
+      dx_->Get(::leveldb::ReadOptions(), "/", tmp);
+  if (status.IsNotFound()) {
+    return Status::NotFound(Slice());
+  } else if (!status.ok()) {
+    return Status::IOError(status.ToString());
+  } else {
+    return Status::OK();
+  }
+}
 
 Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
   ::leveldb::ReadOptions ropts;

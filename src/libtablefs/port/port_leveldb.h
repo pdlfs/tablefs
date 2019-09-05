@@ -22,18 +22,25 @@ namespace pdlfs {
 
 // Options for controlling MDB behavior.
 struct MDBOptions {
+  MDBOptions(::leveldb::DB* db);
   ::leveldb::DB* db;
-  MDBOptions();
 };
 
-// An MXDB instantiation that binds to Leveldb. Leveldb is Google's
-// open-source realization of a LSM-Tree.
+// An MXDB instantiation that binds to Leveldb statically. Leveldb
+// is Google's open-source realization of a LSM-Tree.
 class MDB : public MXDB<::leveldb::DB, ::leveldb::Slice, ::leveldb::Status,
                         kNameInKey> {
  public:
+  // XXX: The DestroyDb port may be a bit too hacky...
+#define DestroyDb(x, y) DestroyDB(x, y)  // Remove the contents of a DB
+  typedef ::leveldb::Options DbOpts;
   typedef ::leveldb::DB Db;
+  static Status Open(const DbOpts&, const std::string& dbloc, Db**);
   explicit MDB(const MDBOptions& options);
   ~MDB();
+
+  Status SaveFsroot(const Slice& encoding);
+  Status LoadFsroot(std::string* tmp);
 
   Status Get(const DirId& id, const Slice& name, Stat* stat);
   Status Set(const DirId& id, const Slice& name, const Stat& stat);
