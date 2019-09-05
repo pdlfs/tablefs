@@ -47,7 +47,7 @@ MDB::MDB(const MDBOptions& options) : MXDB(options.db) {}
 
 MDB::~MDB() {}
 
-Status MDB::Open(const DBOpts& dbopts, const std::string& dbloc, Db** dbptr) {
+Status MDB::Open(const DbOpts& dbopts, const std::string& dbloc, Db** dbptr) {
   return Db::Open(dbopts, dbloc, dbptr);
 }
 
