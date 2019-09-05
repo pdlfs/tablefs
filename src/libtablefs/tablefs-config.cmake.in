@@ -39,6 +39,9 @@ set (TABLEFS_ALL_COMPONENTS ${TABLEFS_REQUIRED_PACKAGES})
 set (TABLEFS_PORT_LEVELDB "@TABLEFS_PORT_LEVELDB@")
 set (TABLEFS_PORT_KVRANGE "@TABLEFS_PORT_KVRANGE@")
 
+# adjust module path to make it easy to pick up files from the config directory
+set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_LIST_DIR}")
+
 # if you have depends, uncomment and add them: "find_dependency(Foo 2.4.1)"
 include (CMakeFindDependencyMacro)
 
