@@ -33,6 +33,7 @@
  */
 
 #include "tablefs/tablefs_api.h"
+#include "pdlfs-common/pdlfs_platform.h"
 #include "tablefs.h"
 
 #include <errno.h>
@@ -203,11 +204,17 @@ int tablefs_lstat(tablefs_t* h, const char* path, struct stat* const buf) {
   } else if (!buf) {
     status = BadArgs();
   } else {
-    status = h->fs->Lstat(h->me, NULL, path, &stat);  /// XXX: NO atime
-    if (status.ok()) {
+    status = h->fs->Lstat(h->me, NULL, path, &stat);
+    if (status.ok()) {  /// XXX: currently no atimes are maintained
+#ifdef PDLFS_OS_MACOSX
       SetTimespec(&buf->st_atimespec, stat.ModifyTime());
       SetTimespec(&buf->st_mtimespec, stat.ModifyTime());
       SetTimespec(&buf->st_ctimespec, stat.ChangeTime());
+#else
+      SetTimespec(&buf->st_atim, stat.ModifyTime());
+      SetTimespec(&buf->st_mtim, stat.ModifyTime());
+      SetTimespec(&buf->st_ctim, stat.ChangeTime());
+#endif
       buf->st_ino = stat.InodeNo();
       buf->st_size = stat.FileSize();
       buf->st_mode = stat.FileMode();
