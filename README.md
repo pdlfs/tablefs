@@ -1,5 +1,7 @@
 **Fast and efficient filesystem metadata through LSM-Trees.**
 
+[![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
+
 TableFS by DeltaFS
 =======
 
