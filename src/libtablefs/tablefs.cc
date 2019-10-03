@@ -49,14 +49,9 @@ struct FilesystemLookupCache {
 // Root information of a filesystem image.
 struct FilesystemRoot {
   FilesystemRoot() {}  // Intentionally not initialized for performance.
-  // Encode state into a buf space.
-  Slice EncodeTo(char* scratch) const;
-  // Recover state from a given encoding string.
-  // Return True on success, False otherwise.
-  bool DecodeFrom(const Slice& encoding);
-  bool DecodeFrom(Slice* input);
-
+  // Inode num for the next file or directory
   uint64_t inoseq;
+  // Stat of the root directory
   Stat rootstat;
 };
 
@@ -445,22 +440,28 @@ Status Filesystem::Getdir(  ///
   }
 }
 
-Slice FilesystemRoot::EncodeTo(char* scratch) const {
-  Slice en = rootstat.EncodeTo(scratch);
-  char* p = EncodeVarint64(scratch + en.size(), inoseq);
-  return Slice(scratch, p - scratch);
-}
-
-bool FilesystemRoot::DecodeFrom(const Slice& encoding) {
-  Slice input = encoding;
-  return DecodeFrom(&input);
-}
-
-bool FilesystemRoot::DecodeFrom(Slice* input) {
-  if (!rootstat.DecodeFrom(input))  ///
+namespace {
+// Recover information from a given encoding string.
+// Return True on success, False otherwise.
+bool DecodeFrom(FilesystemRoot* r, Slice* input) {
+  if (!r->rootstat.DecodeFrom(input))  ///
     return false;
-  return GetVarint64(input, &inoseq);
+  return GetVarint64(input, &r->inoseq);
 }
+
+bool DecodeFrom(FilesystemRoot* r, const Slice& encoding) {
+  Slice input = encoding;
+  return DecodeFrom(r, &input);
+}
+
+// Encode root information into a buf space.
+Slice EncodeTo(FilesystemRoot* r, char* scratch) {
+  Slice en = r->rootstat.EncodeTo(scratch);
+  char* p = EncodeVarint64(scratch + en.size(), r->inoseq);
+  Slice rv(scratch, p - scratch);
+  return rv;
+}
+}  // namespace
 
 FilesystemOptions::FilesystemOptions()
     : size_lookup_cache(4096),
@@ -503,7 +504,7 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
     r_->inoseq = 2;
     status = Status::OK();
   } else if (status.ok()) {
-    if (!r_->DecodeFrom(tmp)) {
+    if (!DecodeFrom(r_, tmp)) {
       status = Status::Corruption("Cannot recover fs root");
     }
   }
@@ -513,7 +514,7 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
 Filesystem::~Filesystem() {
   char tmp[200];
   if (mdb_) {
-    Slice encoding = r_->EncodeTo(tmp);
+    Slice encoding = EncodeTo(r_, tmp);
     mdb_->SaveFsroot(encoding);
     delete mdb_;
   }
