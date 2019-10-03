@@ -42,26 +42,17 @@
 
 namespace pdlfs {
 
+struct FilesystemLookupCache;
+struct FilesystemRoot;
+
 // Options for controlling the filesystem.
 struct FilesystemOptions {
   FilesystemOptions();
+  size_t size_lookup_cache;
   bool skip_name_collision_checks;
   bool skip_perm_checks;
 };
-// Root information of a filesystem (superblock).
-struct FilesystemRoot {
-  FilesystemRoot() {}  // Intentionally not initialized for performance.
-  // Encode state into a buf space.
-  Slice EncodeTo(char* scratch) const;
-  // Recover state from a given encoding string.
-  // Return True on success, False otherwise.
-  bool DecodeFrom(const Slice& encoding);
-  bool DecodeFrom(Slice* input);
-
-  uint64_t inoseq;
-  Stat rootstat;
-};
-struct FilesystemDir;  // Abstract filesystem dir handle.
+struct FilesystemDir;  // Opaque filesystem dir handle.
 // User id information.
 struct User {
   uid_t uid;
@@ -71,9 +62,8 @@ struct User {
 class Filesystem {
  public:
   explicit Filesystem(const FilesystemOptions& options);
-  ~Filesystem();
-
   Status OpenFilesystem(const std::string& fsloc);
+  ~Filesystem();
 
   // REQUIRES: OpenFilesystem has been called.
 
@@ -90,13 +80,39 @@ class Filesystem {
   Status Closdir(FilesystemDir* dir);
 
  private:
+  // Resolve a filesystem path down to the last component of the path. Return
+  // the name of the last component and information of its parent directory on
+  // success. In addition, return whether the specified path has tailing
+  // slashes. This method is a wrapper function over "Resolv", and should be
+  // called instead of it. When the input filesystem path points to the root
+  // directory, the root directory itself is returned as the parent directory
+  // while the name of the last component of the path is set to empty.
   Status Resolu(const User& who, const Stat& at, const char* pathname,
                 Stat* parent_dir, Slice* last_component,
                 bool* has_tailing_slashes);
+
+  // Resolve a filesystem path down to the last component of the path. Return
+  // the name of the last component and information of its parent directory on
+  // success. When some parent directory in the middle of the path turns out to
+  // not exist, not be a directory, or when other types of error occur, an
+  // non-OK status is returned along with the path following (not including) the
+  // erroneous directory.
   Status Resolv(const User& who, const Stat& relative_root,
                 const char* pathname, Stat* parent_dir, Slice* last_component,
                 const char** remaining_path);
 
+  // Retrieve information with the help of an in-memory cache. Cached
+  // information is returned as a reference-counted handle. This function is a
+  // wrapper function over "Lookup". Information is first attempted at a cache
+  // before the more costly "Lookup" is invoked. When "Lookup" is invoked, the
+  // result will be inserted into the cache reducing future lookup cost.
+  Status LookupWithCache(FilesystemLookupCache* const c, const User& who,
+                         const Stat& parent_dir, const Slice& name,
+                         uint32_t mode, Stat* stat);
+
+  // Retrieve information of a name under a given parent directory. If mode is
+  // specified, only names of a certain file type (e.g., S_IFDIR, S_IFREG)
+  // will be considered. Set mode to 0 to consider all file types.
   Status Lookup(const User& who, const Stat& parent_dir, const Slice& name,
                 uint32_t mode, Stat* stat);
   Status Getdir(const User& who, const Stat& parent_dir, const Slice& name,
@@ -107,11 +123,12 @@ class Filesystem {
   Status Insert(const User& who, const Stat& parent_dir, const Slice& name,
                 uint32_t mode, Stat* stat);
 
+  FilesystemLookupCache* cache_;
+  FilesystemRoot* r_;
+
   // No copying allowed
   void operator=(const Filesystem& fs);
   Filesystem(const Filesystem&);
-
-  FilesystemRoot r_;
   FilesystemOptions options_;
   MDB::Db* db_;
   MDB* mdb_;

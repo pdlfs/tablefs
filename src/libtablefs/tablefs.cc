@@ -33,15 +33,38 @@
  */
 #include "tablefs.h"
 
+#include "pdlfs-common/lru.h"
+
 #include <sys/stat.h>
 
 namespace pdlfs {
+
+// Lookup cache for speeding up pathname resolutions.
+struct FilesystemLookupCache {
+  explicit FilesystemLookupCache(size_t cap) : lru_(cap) {}
+  typedef LRUEntry<Stat> Handle;
+  LRUCache<Handle> lru_;
+};
+
+// Root information of a filesystem image.
+struct FilesystemRoot {
+  FilesystemRoot() {}  // Intentionally not initialized for performance.
+  // Encode state into a buf space.
+  Slice EncodeTo(char* scratch) const;
+  // Recover state from a given encoding string.
+  // Return True on success, False otherwise.
+  bool DecodeFrom(const Slice& encoding);
+  bool DecodeFrom(Slice* input);
+
+  uint64_t inoseq;
+  Stat rootstat;
+};
 
 Status Filesystem::Lstat(  ///
     const User& who, const Stat* at, const char* const pathname,
     Stat* const stat) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_.rootstat;
+  if (!at) at = &r_->rootstat;
   Stat parent_dir;
   Slice tgt;
   Status status =
@@ -55,7 +78,7 @@ Status Filesystem::Lstat(  ///
         has_tailing_slashes ? S_IFDIR : 0;  // Target must be a dir
     status = Lookup(who, parent_dir, tgt, mode, stat);
   } else {  // Special case in which path is a root
-    *stat = r_.rootstat;
+    *stat = r_->rootstat;
   }
 
   return status;
@@ -65,7 +88,7 @@ Status Filesystem::Opendir(  ///
     const User& who, const Stat* at, const char* const pathname,
     FilesystemDir** dir) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_.rootstat;
+  if (!at) at = &r_->rootstat;
   Stat parent_dir;
   Slice dirname;
   Status status =
@@ -95,7 +118,7 @@ Status Filesystem::Mkdir(  ///
     const User& who, const Stat* at, const char* const pathname,
     uint32_t mode) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_.rootstat;
+  if (!at) at = &r_->rootstat;
   Stat parent_dir;
   Slice dirname;
   Status status =
@@ -117,7 +140,7 @@ Status Filesystem::Mkfil(  ///
     const User& who, const Stat* at, const char* const pathname,
     uint32_t mode) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_.rootstat;
+  if (!at) at = &r_->rootstat;
   Stat parent_dir;
   Slice fname;
   Status status =
@@ -287,7 +310,11 @@ Status Filesystem::Resolv(  ///
     }
     current_name = Slice(p + 1, q - p - 1);
     p = c - 1;
-    status = Lookup(who, *current_parent, current_name, S_IFDIR, &tmp);
+    // If caching is enabled, result may be read (copied) from the cache instead
+    // of the filesystem's DB instance. No cache handle or reference counting
+    // stuff is exposed to us (the caller) keeping semantics simple
+    status = LookupWithCache(cache_, who, *current_parent, current_name,
+                             S_IFDIR, &tmp);
     if (status.ok()) {
       current_parent = &tmp;
     } else {
@@ -305,9 +332,48 @@ Status Filesystem::Resolv(  ///
   return status;
 }
 
+namespace {
+void DeleteStat(  /// Delete stat inside a cache entry
+    const Slice& key, Stat* stat) {
+  delete stat;
+}
+}  // namespace
+
+Status Filesystem::LookupWithCache(  ///
+    FilesystemLookupCache* const c, const User& who, const Stat& parent_dir,
+    const Slice& name, uint32_t mode, Stat* stat) {
+  FilesystemLookupCache::Handle* h = NULL;
+  Status status;
+  std::string key;
+  uint32_t namehash;
+  uint32_t hash;
+  if (c) {
+    key.reserve(16);
+    PutFixed64(&key, parent_dir.InodeNo());
+    namehash = Hash(name.data(), name.size(), 0);
+    PutFixed64(&key, namehash);
+    hash = Hash(key.data(), key.size(), 0);
+    h = c->lru_.Lookup(key, hash);
+  }
+  if (!h) {  // Either cache is disabled or key is not cached
+    status = Lookup(who, parent_dir, name, mode, stat);
+  } else {
+    *stat = *h->value;
+    c->lru_.Release(h);
+    return status;
+  }
+
+  if (c && status.ok()) {  // Cache the lookup result if it is a success
+    h = c->lru_.Insert(key, hash, new Stat(*stat), 1, DeleteStat);
+    c->lru_.Release(h);
+  }
+
+  return status;
+}
+
 Status Filesystem::Lookup(  ///
-    const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
-    Stat* const stat) {
+    const User& who, const Stat& parent_dir, const Slice& name,
+    uint32_t const mode, Stat* const stat) {
   if (!IsLookupOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
@@ -338,7 +404,7 @@ Status Filesystem::Insert(  ///
     }
   }
 
-  stat->SetInodeNo(r_.inoseq++);
+  stat->SetInodeNo(r_->inoseq++);
   stat->SetFileSize(0);
   stat->SetFileMode(mode);
   stat->SetUserId(who.uid);
@@ -360,7 +426,7 @@ Status Filesystem::Getdir(  ///
   }
   Stat tmp;
   const DirId pdir(parent_dir);
-  const Stat* stat = &r_.rootstat;
+  const Stat* stat = &r_->rootstat;
   Status status;
   if (!name.empty()) {  // No need to get if target is root
     status = mdb_->Get(pdir, name, &tmp);
@@ -397,13 +463,20 @@ bool FilesystemRoot::DecodeFrom(Slice* input) {
 }
 
 FilesystemOptions::FilesystemOptions()
-    : skip_name_collision_checks(false), skip_perm_checks(false) {}
+    : size_lookup_cache(4096),
+      skip_name_collision_checks(false),
+      skip_perm_checks(false) {}
 
 Filesystem::Filesystem(const FilesystemOptions& options)
-    : options_(options), db_(NULL), mdb_(NULL) {}
+    : cache_(NULL), r_(NULL), options_(options), db_(NULL), mdb_(NULL) {
+  if (options_.size_lookup_cache) {
+    cache_ = new FilesystemLookupCache(options_.size_lookup_cache);
+  }
+  r_ = new FilesystemRoot;
+}
 
 namespace {
-void InitializeFilesystem(Stat* const root) {
+inline void FormatFilesystem(Stat* const root) {
   root->SetInodeNo(0);
   root->SetFileSize(0);
   root->SetFileMode(S_IFDIR | S_ISVTX | ACCESSPERMS);
@@ -426,11 +499,11 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   mdb_ = new MDB(MDBOptions(db_));
   status = mdb_->LoadFsroot(&tmp);
   if (status.IsNotFound()) {  // This is a new fs image
-    InitializeFilesystem(&r_.rootstat);
-    r_.inoseq = 2;
+    FormatFilesystem(&r_->rootstat);
+    r_->inoseq = 2;
     status = Status::OK();
   } else if (status.ok()) {
-    if (!r_.DecodeFrom(tmp)) {
+    if (!r_->DecodeFrom(tmp)) {
       status = Status::Corruption("Cannot recover fs root");
     }
   }
@@ -440,9 +513,13 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
 Filesystem::~Filesystem() {
   char tmp[200];
   if (mdb_) {
-    Slice encoding = r_.EncodeTo(tmp);
+    Slice encoding = r_->EncodeTo(tmp);
     mdb_->SaveFsroot(encoding);
     delete mdb_;
+  }
+  delete r_;
+  if (cache_) {
+    delete cache_;
   }
   if (db_) {
     delete db_;
