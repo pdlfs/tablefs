@@ -34,6 +34,7 @@
 #include "tablefs.h"
 
 #include "pdlfs-common/lru.h"
+#include "pdlfs-common/mutexlock.h"
 
 #include <sys/stat.h>
 
@@ -44,6 +45,7 @@ struct FilesystemLookupCache {
   explicit FilesystemLookupCache(size_t cap) : lru_(cap) {}
   typedef LRUEntry<Stat> Handle;
   LRUCache<Handle> lru_;
+  port::Mutex mu_;
 };
 
 // Root information of a filesystem image.
@@ -348,17 +350,20 @@ Status Filesystem::LookupWithCache(  ///
     namehash = Hash(name.data(), name.size(), 0);
     PutFixed64(&key, namehash);
     hash = Hash(key.data(), key.size(), 0);
+    MutexLock ml(&c->mu_);
     h = c->lru_.Lookup(key, hash);
-  }
-  if (!h) {  // Either cache is disabled or key is not cached
-    status = Lookup(who, parent_dir, name, mode, stat);
-  } else {
-    *stat = *h->value;
-    c->lru_.Release(h);
-    return status;
+    if (h) {  // Key is in cache; use it and release it.
+      *stat = *h->value;
+      c->lru_.Release(h);
+      return status;
+    }
   }
 
-  if (c && status.ok()) {  // Cache the lookup result if it is a success
+  // Either cache is not enabled (NULL) or key is not in cache
+  status = Lookup(who, parent_dir, name, mode, stat);
+  if (c && status.ok()) {
+    // Cache result if it is a success
+    MutexLock ml(&c->mu_);
     h = c->lru_.Insert(key, hash, new Stat(*stat), 1, DeleteStat);
     c->lru_.Release(h);
   }
