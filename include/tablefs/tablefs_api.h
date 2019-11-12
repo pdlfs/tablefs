@@ -44,9 +44,11 @@ extern "C" {
 struct tablefs; /* Opaque handle to a filesystem instance */
 typedef struct tablefs tablefs_t;
 tablefs_t* tablefs_newfshdl();
+int tablefs_set_readonly(tablefs_t* h, int flg);
 /* Open a filesystem image at a given location */
 int tablefs_openfs(tablefs_t* h, const char* fsloc);
-int tablefs_closefs(tablefs_t* h);
+/* Close a filesystem image and delete its handle */
+int tablefs_delfshdl(tablefs_t* h);
 /* Retrieve file status */
 int tablefs_lstat(tablefs_t* h, const char* path, struct stat* stat);
 /* Create a regular file at a specified path */

@@ -152,7 +152,12 @@ int tablefs_openfs(tablefs_t* h, const char* fsloc) {
   }
 }
 
-int tablefs_closefs(tablefs_t* h) {
+int tablefs_set_readonly(tablefs_t* h, int flg) {
+  if (h) h->fsopts->rdonly = flg;
+  return 0;
+}
+
+int tablefs_delfshdl(tablefs_t* h) {
   if (h) {
     delete h->fsopts;
     delete h->fs;

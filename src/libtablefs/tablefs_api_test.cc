@@ -89,7 +89,7 @@ class FilesystemAPI {
 
   ~FilesystemAPI() {
     if (fs_) {
-      tablefs_closefs(fs_);
+      tablefs_delfshdl(fs_);
     }
   }
 
