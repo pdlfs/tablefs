@@ -55,7 +55,7 @@ class MDB : public MXDB<::leveldb::DB, ::leveldb::Slice, ::leveldb::Status,
                         kNameInKey> {
  public:
   // XXX: The DestroyDb port may be a bit too hacky...
-#define DestroyDb(x, y) DestroyDB(x, y)  // Remove the contents of a DB
+#define DestroyDb(x, y) ::leveldb::DestroyDB(x, y)  // Remove DB contents
   typedef ::leveldb::Options DbOpts;
   typedef ::leveldb::DB Db;
   static Status Open(const DbOpts&, const std::string& dbloc, Db**);
