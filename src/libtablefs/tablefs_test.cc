@@ -33,11 +33,13 @@
  */
 #include "tablefs.h"
 
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/random.h"
 #include "pdlfs-common/testharness.h"
 
 #include <sys/stat.h>
 #include <set>
+#include <string>
 
 namespace pdlfs {
 
@@ -207,8 +209,191 @@ TEST(FilesystemTest, Listdir2) {
   ASSERT_OK(fs_->Closdir(dir));
 }
 
+namespace {
+inline int GetIntegerOptionFromEnv(const char* key, int def) {
+  const char* const env = getenv(key);
+  if (env && env[0]) {
+    return atoi(env);
+  } else {
+    return def;
+  }
+}
+
+int GetOpt(const char* key, int def) {
+  int opt = GetIntegerOptionFromEnv(key, def);
+  fprintf(stderr, "%s=%d\n", key, opt);
+  return opt;
+}
+}  // namespace
+
+/*
+ * Insert directories and files into an empty filesystem image. The directories
+ * and files are inserted according to a fan-out factor (2 in the example
+ * below), a tree depth (2 in the example), and a files-per-leaf-dir number (3
+ * in the example), as illustrated below.
+ *
+ * Depth 0  ------------>     ROOT
+ *                          /      \
+ * Depth 1  ------>   Dir 1         Dir 2
+ *                  /     \        /     \
+ * Depth 2  -> Dir 1   Dir 2    Dir 1    Dir 2   <-- Leaf directories
+ *             / | \   / | \    / | \    / | \
+ *           F1 F2 F3 F1 F2 F3 F1 F2 F3 F1 F2 F3
+ */
+class FilesystemLoader {
+ public:
+  explicit FilesystemLoader(const std::string& fsloc) : fsloc_(fsloc) {
+    files_per_leaddir_ = GetOpt("FILES_PER_LEAFDIR", 3);
+    tree_depth_ = GetOpt("TREE_DEPTH", 2);
+    me_.gid = GetOpt("USER_GROUP_ID", 1);
+    me_.uid = GetOpt("USER_ID", 1);
+    f_ = GetOpt("FAN_OUT", 2);
+  }
+
+  void Doit(Filesystem* fs, std::string* path, int depth) {
+    const size_t prefix_len = path->size();
+    if (depth == tree_depth_) {  // This is the leaf level of directories
+      for (int i = 0; i < files_per_leaddir_; i++) {
+        path->push_back('a' + i);
+        ASSERT_OK(fs->Mkfil(me_, NULL, path->c_str(), 0644));
+        fprintf(stderr, "%s\n", path->c_str());
+        path->resize(prefix_len);
+      }
+    } else {
+      for (int i = 0; i < f_; i++) {
+        path->push_back('A' + i);
+        ASSERT_OK(fs->Mkdir(me_, NULL, path->c_str(), 0755));
+        fprintf(stderr, "%s\n", path->c_str());
+        path->push_back('/');  // Add path delimiter
+        Doit(fs, path, depth + 1);
+        path->resize(prefix_len);
+      }
+    }
+  }
+
+  void Run() {
+    DestroyDb(fsloc_, MDB::DbOpts());
+    Filesystem* const fs = new Filesystem(options_);
+    ASSERT_OK(fs->OpenFilesystem(fsloc_));
+    std::string path("/");
+    Doit(fs, &path, 0);
+    delete fs;
+  }
+
+  User me_;
+  std::string fsloc_;
+  FilesystemOptions options_;
+  int files_per_leaddir_;
+  int tree_depth_;
+  int f_;
+};
+
+/*
+ * List contents populated by FilesystemLoader.
+ */
+class FilesystemLister {
+ public:
+  explicit FilesystemLister(const std::string& fsloc) : fsloc_(fsloc) {
+    me_.gid = GetOpt("USER_GROUP_ID", 1);
+    me_.uid = GetOpt("USER_ID", 1);
+  }
+
+  void Doit(Filesystem* fs, std::string* path) {
+    FilesystemDir* dir;
+    const size_t prefix_len = path->size();
+    ASSERT_OK(fs->Opendir(me_, NULL, path->c_str(), &dir));
+    std::string name;
+    Stat stat;
+    for (;;) {
+      Status status = fs->Readdir(dir, &stat, &name);
+      if (status.IsNotFound()) {
+        break;
+      }
+
+      ASSERT_OK(status);
+
+      if (S_ISREG(stat.FileMode())) {
+        fprintf(stderr, "%s%s\n", path->c_str(), name.c_str());
+      } else {
+        path->append(name);
+        fprintf(stderr, "%s\n", path->c_str());
+        path->push_back('/');
+        Doit(fs, path);
+        path->resize(prefix_len);
+      }
+    }
+
+    fs->Closdir(dir);
+  }
+
+  void Run() {
+    Filesystem* const fs = new Filesystem(options_);
+    ASSERT_OK(fs->OpenFilesystem(fsloc_));
+    std::string path("/");
+    Doit(fs, &path);
+    delete fs;
+  }
+
+  FilesystemOptions options_;
+  std::string fsloc_;
+  User me_;
+};
+
 }  // namespace pdlfs
 
+#if defined(PDLFS_GFLAGS)
+#include <gflags/gflags.h>
+#endif
+#if defined(PDLFS_GLOG)
+#include <glog/logging.h>
+#endif
+
+namespace {
+void BM_Usage() {
+  fprintf(stderr, "Use --prog=[loader,lister] <fsloc> to run programs.\n");
+  fprintf(stderr, "\n");
+  exit(EXIT_FAILURE);
+}
+
+void BM_Main(int* argc, char*** argv) {
+#if defined(PDLFS_GFLAGS)
+  google::ParseCommandLineFlags(argc, argv, true);
+#endif
+#if defined(PDLFS_GLOG)
+  google::InitGoogleLogging((*argv)[0]);
+  google::InstallFailureSignalHandler();
+#endif
+  pdlfs::Slice prog_name;
+  if (*argc > 2) {
+    prog_name = pdlfs::Slice((*argv)[*argc - 2]);
+  } else {
+    BM_Usage();
+  }
+  const char* fsloc = (*argv)[*argc - 1];
+  if (prog_name == "--prog=loader") {
+    pdlfs::FilesystemLoader prog(fsloc);
+    prog.Run();
+  } else if (prog_name == "--prog=lister") {
+    pdlfs::FilesystemLister prog(fsloc);
+    prog.Run();
+  } else {
+    BM_Usage();
+  }
+}
+}  // namespace
+
 int main(int argc, char** argv) {
-  return ::pdlfs::test::RunAllTests(&argc, &argv);
+  pdlfs::Slice token1, token2;
+  if (argc > 2) {
+    token2 = pdlfs::Slice(argv[argc - 2]);
+  }
+  if (argc > 1) {
+    token1 = pdlfs::Slice(argv[argc - 1]);
+  }
+  if (!token1.starts_with("--prog") && !token2.starts_with("--prog")) {
+    return pdlfs::test::RunAllTests(&argc, &argv);
+  } else {
+    BM_Main(&argc, &argv);
+    return 0;
+  }
 }
