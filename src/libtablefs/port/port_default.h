@@ -51,12 +51,14 @@ class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
 #define DestroyDb(x, y) DestroyDB(x, y)  // Remove the contents of a DB
   typedef DBOptions DbOpts;
   typedef DB Db;
-  static Status Open(const DbOpts&, const std::string& dbloc, Db**);
-  explicit MDB(const MDBOptions& options);
+  static Status Open(const DbOpts& dbopts, const std::string& dbloc,
+                     bool rdonly, Db** dbptr);
+  explicit MDB(const MDBOptions& opts);
   ~MDB();
 
   Status SaveFsroot(const Slice& encoding);
   Status LoadFsroot(std::string* tmp);
+  Status Flush();
 
   Status Get(const DirId& id, const Slice& name, Stat* stat);
   Status Set(const DirId& id, const Slice& name, const Stat& stat);

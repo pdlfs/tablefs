@@ -499,7 +499,7 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   MDB::DbOpts dbopts;
   dbopts.create_if_missing = !options_.rdonly;
   std::string tmp;
-  Status status = MDB::Open(dbopts, fsloc, &db_);
+  Status status = MDB::Open(dbopts, fsloc, options_.rdonly, &db_);
   if (!status.ok()) {
     return status;
   }
@@ -522,6 +522,7 @@ Filesystem::~Filesystem() {
   if (mdb_ && !options_.rdonly) {
     Slice encoding = EncodeTo(r_, tmp);
     mdb_->SaveFsroot(encoding);
+    mdb_->Flush();
   }
   delete mdb_;
   delete r_;

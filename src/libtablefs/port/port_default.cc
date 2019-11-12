@@ -34,6 +34,8 @@
 
 #include "port_default.h"
 
+#include "pdlfs-common/leveldb/db/readonly.h"  // XXX: To be moved to pdlfs-common/mdb.h
+
 namespace pdlfs {
 
 MDBOptions::MDBOptions(DB* db) : db(db) {}
@@ -43,11 +45,13 @@ struct MDB::Tx {
   WriteBatch bat;
 };
 
-MDB::MDB(const MDBOptions& options) : MXDB(options.db) {}
+MDB::MDB(const MDBOptions& opts) : MXDB(opts.db) {}
 
 MDB::~MDB() {}
 
-Status MDB::Open(const DbOpts& dbopts, const std::string& dbloc, Db** dbptr) {
+Status MDB::Open(const DbOpts& dbopts, const std::string& dbloc, bool rdonly,
+                 Db** dbptr) {
+  if (rdonly) return ReadonlyDB::Open(dbopts, dbloc, dbptr);
   return Db::Open(dbopts, dbloc, dbptr);
 }
 
@@ -57,6 +61,10 @@ Status MDB::SaveFsroot(const Slice& encoding) {
 
 Status MDB::LoadFsroot(std::string* tmp) {
   return dx_->Get(ReadOptions(), "/", tmp);
+}
+
+Status MDB::Flush() {  ///
+  return dx_->FlushMemTable(FlushOptions());
 }
 
 Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
