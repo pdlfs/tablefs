@@ -48,9 +48,10 @@ struct FilesystemRoot;
 // Options for controlling the filesystem.
 struct FilesystemOptions {
   FilesystemOptions();
-  size_t size_lookup_cache;
+  size_t size_lookup_cache;  // Default: 0 (cache disabled)
   bool skip_name_collision_checks;
   bool skip_perm_checks;
+  bool rdonly;
 };
 struct FilesystemDir;  // Opaque filesystem dir handle.
 // User id information.

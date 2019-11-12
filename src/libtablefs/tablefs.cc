@@ -469,9 +469,10 @@ Slice EncodeTo(FilesystemRoot* r, char* scratch) {
 }  // namespace
 
 FilesystemOptions::FilesystemOptions()
-    : size_lookup_cache(4096),
+    : size_lookup_cache(0),
       skip_name_collision_checks(false),
-      skip_perm_checks(false) {}
+      skip_perm_checks(false),
+      rdonly(false) {}
 
 Filesystem::Filesystem(const FilesystemOptions& options)
     : cache_(NULL), r_(NULL), options_(options), db_(NULL), mdb_(NULL) {
@@ -496,7 +497,7 @@ inline void FormatFilesystem(Stat* const root) {
 
 Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   MDB::DbOpts dbopts;
-  dbopts.create_if_missing = true;
+  dbopts.create_if_missing = !options_.rdonly;
   std::string tmp;
   Status status = MDB::Open(dbopts, fsloc, &db_);
   if (!status.ok()) {
@@ -518,11 +519,11 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
 
 Filesystem::~Filesystem() {
   char tmp[200];
-  if (mdb_) {
+  if (mdb_ && !options_.rdonly) {
     Slice encoding = EncodeTo(r_, tmp);
     mdb_->SaveFsroot(encoding);
-    delete mdb_;
   }
+  delete mdb_;
   delete r_;
   if (cache_) {
     delete cache_;
