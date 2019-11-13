@@ -131,18 +131,18 @@ extern "C" {
 tablefs_t* tablefs_newfshdl() {
   tablefs_t* h = static_cast<tablefs_t*>(malloc(sizeof(struct tablefs)));
   h->fsopts = new pdlfs::FilesystemOptions;
-  h->fs = new pdlfs::Filesystem(*h->fsopts);
+  h->fs = NULL;
   h->me.uid = getuid();
   h->me.gid = getgid();
   return h;
 }
 
-int tablefs_openfs(tablefs_t* h, const char* fsloc) {
+int tablefs_set_readonly(tablefs_t* h, int flg) {
   pdlfs::Status status;
   if (!h) {
     status = BadArgs();
   } else {
-    status = h->fs->OpenFilesystem(fsloc);
+    h->fsopts->rdonly = flg;
   }
 
   if (!status.ok()) {
@@ -152,9 +152,20 @@ int tablefs_openfs(tablefs_t* h, const char* fsloc) {
   }
 }
 
-int tablefs_set_readonly(tablefs_t* h, int flg) {
-  if (h) h->fsopts->rdonly = flg;
-  return 0;
+int tablefs_openfs(tablefs_t* h, const char* fsloc) {
+  pdlfs::Status status;
+  if (!h) {
+    status = BadArgs();
+  } else {
+    h->fs = new pdlfs::Filesystem(*h->fsopts);
+    status = h->fs->OpenFilesystem(fsloc);
+  }
+
+  if (!status.ok()) {
+    return FilesystemError(h, status);
+  } else {
+    return 0;
+  }
 }
 
 int tablefs_delfshdl(tablefs_t* h) {
