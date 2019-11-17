@@ -133,7 +133,7 @@ Status Filesystem::Mkdir(  ///
   return status;
 }
 
-Status Filesystem::Mkfil(  ///
+Status Filesystem::Mkreg(  ///
     const User& who, const Stat* at, const char* const pathname,
     uint32_t mode) {
   bool has_tailing_slashes(false);

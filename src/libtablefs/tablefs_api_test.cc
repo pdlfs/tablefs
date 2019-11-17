@@ -78,7 +78,7 @@ class FilesystemAPI {
   }
 
   void Creat(const char* path) {
-    int r = tablefs_mkfil(fs_, path, 0660);
+    int r = tablefs_mkreg(fs_, path, 0660);
     ASSERT_TRUE(r == 0);
   }
 

@@ -177,14 +177,14 @@ int tablefs_delfshdl(tablefs_t* h) {
   return 0;
 }
 
-int tablefs_mkfil(tablefs_t* h, const char* path, uint32_t mode) {
+int tablefs_mkreg(tablefs_t* h, const char* path, uint32_t mode) {
   pdlfs::Status status;
   if (!h) {
     status = BadArgs();
   } else if (!path || path[0] != '/') {
     status = BadArgs();
   } else {
-    status = h->fs->Mkfil(h->me, NULL, path, mode);
+    status = h->fs->Mkreg(h->me, NULL, path, mode);
   }
 
   if (!status.ok()) {

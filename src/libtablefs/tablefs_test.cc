@@ -73,7 +73,7 @@ class FilesystemTest {
   }
 
   Status Creat(const char* path, const Stat* at = NULL) {
-    return fs_->Mkfil(me, at, path, 0660);
+    return fs_->Mkreg(me, at, path, 0660);
   }
 
   Status Mkdir(const char* path, const Stat* at = NULL) {
@@ -255,7 +255,7 @@ class FilesystemLoader {
     if (depth == tree_depth_) {  // This is the leaf level of directories
       for (int i = 0; i < files_per_leaddir_; i++) {
         path->push_back('a' + i);
-        ASSERT_OK(fs->Mkfil(me_, NULL, path->c_str(), 0644));
+        ASSERT_OK(fs->Mkreg(me_, NULL, path->c_str(), 0644));
         fprintf(stderr, "%s\n", path->c_str());
         path->resize(prefix_len);
       }

@@ -68,7 +68,7 @@ class Filesystem {
 
   // REQUIRES: OpenFilesystem has been called.
 
-  Status Mkfil(const User& who, const Stat* at, const char* pathname,
+  Status Mkreg(const User& who, const Stat* at, const char* pathname,
                uint32_t mode);
   Status Mkdir(const User& who, const Stat* at, const char* pathname,
                uint32_t mode);
