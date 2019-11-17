@@ -515,7 +515,7 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
   }
   if (!status.ok()) {
     // If we fail we are sunk. To indicate so we delete mdb_ and r_. We keep db_
-    // as is. It will be deleted eventually if created.
+    // and prev_r_ as is. db_ will be deleted eventually if created.
     delete mdb_;
     mdb_ = NULL;
     delete r_;
