@@ -38,6 +38,7 @@
 #include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/port.h"
 
+#include <stdint.h>
 #include <string>
 
 namespace pdlfs {
@@ -54,10 +55,12 @@ struct FilesystemOptions {
   bool rdonly;
 };
 struct FilesystemDir;  // Opaque filesystem dir handle.
-// User id information.
+// User id information. Each user has a unique id distinguishing them
+// from others. In addition, each user can be listed in one or more user groups.
 struct User {
-  uid_t uid;
-  gid_t gid;
+  uint32_t uid;
+  uint32_t gid;
+  // XXX: more groups
 };
 
 class Filesystem {
