@@ -129,6 +129,9 @@ class Filesystem {
 
   FilesystemLookupCache* cache_;
   FilesystemRoot* r_;
+  // Root encoding of fs at the time fs was opened. This prevents us from
+  // writing back root unnecessarily during fs closing.
+  std::string prev_r_;
 
   // No copying allowed
   void operator=(const Filesystem& fs);

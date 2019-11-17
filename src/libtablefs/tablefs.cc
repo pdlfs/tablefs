@@ -479,7 +479,6 @@ Filesystem::Filesystem(const FilesystemOptions& options)
   if (options_.size_lookup_cache) {
     cache_ = new FilesystemLookupCache(options_.size_lookup_cache);
   }
-  r_ = new FilesystemRoot;
 }
 
 namespace {
@@ -496,32 +495,42 @@ inline void FormatFilesystem(Stat* const root) {
 }  // namespace
 
 Status Filesystem::OpenFilesystem(const std::string& fsloc) {
+  r_ = new FilesystemRoot;
   MDB::DbOpts dbopts;
   dbopts.create_if_missing = !options_.rdonly;
-  std::string tmp;
   Status status = MDB::Open(dbopts, fsloc, options_.rdonly, &db_);
   if (!status.ok()) {
     return status;
   }
   mdb_ = new MDB(MDBOptions(db_));
-  status = mdb_->LoadFsroot(&tmp);
+  status = mdb_->LoadFsroot(&prev_r_);
   if (status.IsNotFound()) {  // This is a new fs image
     FormatFilesystem(&r_->rootstat);
     r_->inoseq = 2;
     status = Status::OK();
   } else if (status.ok()) {
-    if (!DecodeFrom(r_, tmp)) {
+    if (!DecodeFrom(r_, prev_r_)) {
       status = Status::Corruption("Cannot recover fs root");
     }
+  }
+  if (!status.ok()) {
+    // If we fail we are sunk. To indicate so we delete mdb_ and r_. We keep db_
+    // as is. It will be deleted eventually if created.
+    delete mdb_;
+    mdb_ = NULL;
+    delete r_;
+    r_ = NULL;
   }
   return status;
 }
 
 Filesystem::~Filesystem() {
   char tmp[200];
-  if (mdb_ && !options_.rdonly) {
+  if (r_ && mdb_ && !options_.rdonly) {
     Slice encoding = EncodeTo(r_, tmp);
-    mdb_->SaveFsroot(encoding);
+    if (encoding != prev_r_) {
+      mdb_->SaveFsroot(encoding);
+    }
     mdb_->Flush();
   }
   delete mdb_;
