@@ -296,7 +296,9 @@ class FilesystemLister {
   explicit FilesystemLister(const std::string& fsloc) : fsloc_(fsloc) {
     me_.gid = GetOpt("USER_GROUP_ID", 1);
     me_.uid = GetOpt("USER_ID", 1);
-    options_.rdonly = true;
+    if (!GetOpt("DISABLE_READONLY", 0)) {
+      options_.rdonly = true;
+    }
   }
 
   void Doit(Filesystem* fs, std::string* path) {
