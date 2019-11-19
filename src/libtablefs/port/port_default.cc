@@ -34,8 +34,6 @@
 
 #include "port_default.h"
 
-#include "pdlfs-common/leveldb/db/readonly.h"  // XXX: To be moved to pdlfs-common/mdb.h
-
 namespace pdlfs {
 
 MDBOptions::MDBOptions(DB* db) : db(db) {}
