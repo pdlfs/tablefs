@@ -25,7 +25,7 @@
 
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
-     crc32c/crc32c_internal.cc crc32c/crc32c_sse42.cc env.cc
+     crc32c/crc32c_sw.cc crc32c/crc32c_sse42.cc env.cc
      env_files.cc fsdbx.cc fstypes.cc hash.cc histogram.cc
      log_reader.cc log_writer.cc logging.cc murmur.cc
      port_posix.cc posix_env.cc posix_logger.cc posix_netdev.cc
@@ -34,7 +34,7 @@ set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      xxhash.cc xxhash_impl.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
      crc32c/crc32c_test.cc env_test.cc fstypes_test.cc
-     hash_test.cc log_test.cc random_test.cc
+     hash_test.cc log_test.cc random_test.cc rpc_test.cc
      strutil_test.cc)
 
 # leveldb sources and tests
@@ -74,16 +74,16 @@ endif ()
 
 # mercury (note that margo uses the mercury rpc class)
 if (PDLFS_MERCURY_RPC OR PDLFS_MARGO_RPC)
-    set (pdlfs-mercury-srcs mercury_rpc.cc)
+    set (pdlfs-mercury-srcs mercury/mercury_rpc.cc)
     if (PDLFS_MERCURY_RPC)
-        set (pdlfs-mercury-tests mercury_test.cc)
+        set (pdlfs-mercury-tests mercury/mercury_test.cc)
     endif ()
 endif ()
 
 # margo
 if (PDLFS_MARGO_RPC)
-    set (pdlfs-margo-srcs margo_rpc.cc)
-    set (pdlfs-margo-tests margo_test.cc)
+    set (pdlfs-margo-srcs margo/margo_rpc.cc)
+    set (pdlfs-margo-tests margo/margo_test.cc)
 endif ()
 
 # rados directory and tests

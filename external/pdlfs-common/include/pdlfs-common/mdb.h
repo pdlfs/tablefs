@@ -14,6 +14,7 @@
 #include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/db/readonly.h"
 #include "pdlfs-common/leveldb/db/snapshot.h"
 #include "pdlfs-common/leveldb/db/write_batch.h"
 #include "pdlfs-common/status.h"
