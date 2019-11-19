@@ -34,7 +34,7 @@ set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      xxhash.cc xxhash_impl.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
      crc32c/crc32c_test.cc env_test.cc fstypes_test.cc
-     hash_test.cc log_test.cc random_test.cc rpc_test.cc
+     hash_test.cc log_test.cc random_test.cc
      strutil_test.cc)
 
 # leveldb sources and tests
@@ -62,7 +62,7 @@ if (PDLFS_DFS_COMMON)
             osd.cc ofs.cc ofs_impl.cc posix_fio.cc
             rpc.cc)
     set (pdlfs-dfs-tests blkdb_test.cc fio_test.cc gigaplus_test.cc
-            ofs_test.cc osd_test.cc)
+            ofs_test.cc osd_test.cc rpc_test.cc)
 endif ()
 
 # ECT sources and tests
@@ -72,22 +72,23 @@ if (PDLFS_SILT_ECT)
     set (pdlfs-ect-tests ect_test.cc)
 endif ()
 
-# mercury (note that margo uses the mercury rpc class)
+# Add mercury srcs (note that margo uses the mercury rpc class)
+# if user has requested it and mercury is found
 if (PDLFS_MERCURY_RPC OR PDLFS_MARGO_RPC)
-    set (pdlfs-mercury-srcs mercury/mercury_rpc.cc)
-    if (PDLFS_MERCURY_RPC)
+    if (TARGET mercury)
+        set (pdlfs-mercury-srcs mercury/mercury_rpc.cc)
         set (pdlfs-mercury-tests mercury/mercury_test.cc)
     endif ()
 endif ()
 
-# margo
-if (PDLFS_MARGO_RPC)
+# Add margo srcs if user has requested it and margo is found
+if (TARGET margo AND PDLFS_MARGO_RPC)
     set (pdlfs-margo-srcs margo/margo_rpc.cc)
     set (pdlfs-margo-tests margo/margo_test.cc)
 endif ()
 
-# rados directory and tests
-if (PDLFS_RADOS)
+# Add rados srcs if user has requested it and rados is found
+if (TARGET rados AND PDLFS_RADOS)
     set (pdlfs-rados-srcs rados_common.cc rados_conn.cc rados_env.cc
          rados_fio.cc rados_ld.cc rados_osd.cc)
     set (pdlfs-rados-tests rados_env_test.cc rados_fio_test.cc)
