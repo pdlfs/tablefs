@@ -377,7 +377,7 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
     Build(10);
     dbi->TEST_CompactMemTable();
     Corrupt(kTableFile, 100, 1);
-    env_.SleepForMicroseconds(100000);
+    SleepForMicroseconds(100000);
   }
   dbi->CompactRange(NULL, NULL);
 

@@ -527,7 +527,7 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                                 Version* base, SequenceNumber* min_seq,
                                 SequenceNumber* max_seq, bool force_level0) {
   mutex_.AssertHeld();
-  const uint64_t start_micros = env_->NowMicros();
+  const uint64_t start_micros = CurrentMicros();
   FileMetaData meta;
   meta.number = versions_->NewFileNumber();
   pending_outputs_.insert(meta.number);
@@ -567,7 +567,7 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
   }
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros;
+  stats.micros = CurrentMicros() - start_micros;
   stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
   return s;
@@ -943,7 +943,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
-  const uint64_t start_micros = env_->NowMicros();
+  const uint64_t start_micros = CurrentMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
   Log(__LOG_ARGS__, 3, "Compacting %d@%d + %d@%d files",
@@ -973,14 +973,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (; input->Valid() && !shutting_down_.Acquire_Load();) {
     // Prioritize immutable compaction work
     if (has_imm_.NoBarrier_Load() != NULL) {
-      const uint64_t imm_start = env_->NowMicros();
+      const uint64_t imm_start = CurrentMicros();
       mutex_.Lock();
       if (imm_ != NULL) {
         CompactMemTable();
         bg_cv_.SignalAll();  // Wakeup MakeRoomForWrite() if necessary
       }
       mutex_.Unlock();
-      imm_micros += (env_->NowMicros() - imm_start);
+      imm_micros += (CurrentMicros() - imm_start);
     }
 
     Slice key = input->key();
@@ -1074,7 +1074,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input = NULL;
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros - imm_micros;
+  stats.micros = CurrentMicros() - start_micros - imm_micros;
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
@@ -1526,7 +1526,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
-      env_->SleepForMicroseconds(1000);
+      SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force && mem_ != NULL &&

@@ -9,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "posix_netdev.h"
+#include "posix_net.h"
 #include "posix_env.h"
 
 #include <arpa/inet.h>
@@ -43,18 +43,43 @@ Status PosixIf::Open() {
   Status s;
   fd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);  // Ignore ipv6
   if (fd_ == -1) {
-    s = IOError("socket", errno);
+    s = PosixError("socket", errno);
     return s;
   }
 
   ifconf_.ifc_len = sizeof(ifr_);
   int r = ioctl(fd_, SIOCGIFCONF, &ifconf_);
   if (r == -1) {
-    s = IOError("ioctl", errno);
+    s = PosixError("ioctl", errno);
     ifconf_.ifc_len = 0;
   }
 
   return s;
+}
+
+// Return all network addresses associated with us.
+Status FetchHostIPAddrs(std::vector<std::string>* ips) {
+  PosixIf sock;
+  std::vector<Ifr> results;
+  Status s = sock.Open();
+  if (s.ok()) {
+    sock.IfConf(&results);
+    for (size_t i = 0; i < results.size(); i++) {
+      ips->push_back(results[i].ip);
+    }
+  }
+  return s;
+}
+
+// Return name of the machine.
+Status FetchHostname(std::string* hostname) {
+  char buf[PDLFS_HOST_NAME_MAX];
+  if (gethostname(buf, sizeof(buf)) == -1) {
+    return PosixError("gethostname", errno);
+  } else {
+    *hostname = buf;
+    return Status::OK();
+  }
 }
 
 }  // namespace pdlfs

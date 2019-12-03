@@ -30,15 +30,8 @@
 
 namespace pdlfs {
 
-inline Status IOError(const Slice& err_context, int err_number) {
-  if (err_number != ENOENT && err_number != EEXIST) {
-    return Status::IOError(err_context, strerror(err_number));
-  } else if (err_number == EEXIST) {
-    return Status::AlreadyExists(err_context);
-  } else {
-    return Status::NotFound(err_context);
-  }
-}
+// Return errors as status objects.
+extern Status PosixError(const Slice& err_context, int err_number);
 
 inline int LockOrUnlock(int fd, bool lock) {
   errno = 0;
@@ -54,24 +47,24 @@ inline int LockOrUnlock(int fd, bool lock) {
 class PosixFileLock : public FileLock {
  public:
   PosixFileLock() {}
-  int fd_;
   std::string name_;
+  int fd_;
 };
 
 // Set of locked files.  We keep a separate set instead of just
 // relying on fcntrl(F_SETLK) since fcntl(F_SETLK) does not provide
 // any protection against multiple uses from the same process.
-class PosixLockTable {
+class LockTable {
  private:
   port::Mutex mu_;
   HashSet locked_files_;
 
   // No copying allowed
-  PosixLockTable(const PosixLockTable&);
-  void operator=(const PosixLockTable&);
+  LockTable(const LockTable&);
+  void operator=(const LockTable&);
 
  public:
-  PosixLockTable() {}
+  LockTable() {}
 
   void Remove(const Slice& fname) {
     MutexLock l(&mu_);
@@ -91,14 +84,14 @@ class PosixLockTable {
 
 class PosixBufferedSequentialFile : public SequentialFile {
  private:
-  std::string filename_;
-  FILE* file_;
+  const std::string filename_;
+  FILE* const file_;
 
  public:
   PosixBufferedSequentialFile(const char* fname, FILE* f)
       : filename_(fname), file_(f) {}
 
-  virtual ~PosixBufferedSequentialFile() { fclose(file_); }
+  virtual ~PosixBufferedSequentialFile();
 
   virtual Status Read(size_t n, Slice* result, char* scratch) {
     Status s;
@@ -106,10 +99,10 @@ class PosixBufferedSequentialFile : public SequentialFile {
     *result = Slice(scratch, r);
     if (r < n) {
       if (feof(file_)) {
-        // We leave status as ok if we hit the end of the file
+        // Leave status as ok if we hit eof
       } else {
         // A partial read with an error: return a non-ok status
-        s = IOError(filename_, errno);
+        s = PosixError(filename_, errno);
       }
     }
     return s;
@@ -117,7 +110,7 @@ class PosixBufferedSequentialFile : public SequentialFile {
 
   virtual Status Skip(uint64_t n) {
     if (fseek(file_, n, SEEK_CUR)) {
-      return IOError(filename_, errno);
+      return PosixError(filename_, errno);
     }
     return Status::OK();
   }
@@ -125,19 +118,19 @@ class PosixBufferedSequentialFile : public SequentialFile {
 
 class PosixSequentialFile : public SequentialFile {
  private:
-  std::string filename_;
-  int fd_;
+  const std::string filename_;
+  const int fd_;
 
  public:
   PosixSequentialFile(const char* fname, int fd) : filename_(fname), fd_(fd) {}
 
-  virtual ~PosixSequentialFile() { close(fd_); }
+  virtual ~PosixSequentialFile();
 
   virtual Status Read(size_t n, Slice* result, char* scratch) {
     Status s;
     ssize_t nr = read(fd_, scratch, n);
     if (nr == -1) {
-      s = IOError(filename_, errno);
+      s = PosixError(filename_, errno);
     } else if (nr != 0) {
       *result = Slice(scratch, static_cast<size_t>(nr));
     } else {  // EOF
@@ -150,7 +143,7 @@ class PosixSequentialFile : public SequentialFile {
   virtual Status Skip(uint64_t n) {
     off_t r = lseek(fd_, n, SEEK_CUR);
     if (r == -1) {
-      return IOError(filename_, errno);
+      return PosixError(filename_, errno);
     } else {
       return Status::OK();
     }
@@ -159,23 +152,25 @@ class PosixSequentialFile : public SequentialFile {
 
 class PosixRandomAccessFile : public RandomAccessFile {
  private:
-  std::string filename_;
-  int fd_;
+  const std::string filename_;
+  const int fd_;
 
  public:
   PosixRandomAccessFile(const char* fname, int fd)
       : filename_(fname), fd_(fd) {}
 
-  virtual ~PosixRandomAccessFile() { close(fd_); }
+  virtual ~PosixRandomAccessFile();
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
     Status s;
     ssize_t r = pread(fd_, scratch, n, static_cast<off_t>(offset));
-    *result = Slice(scratch, static_cast<size_t>(r < 0 ? 0 : r));
     if (r < 0) {
       // An error: return a non-ok status
-      s = IOError(filename_, errno);
+      s = PosixError(filename_, errno);
+      *result = Slice();
+    } else {
+      *result = Slice(scratch, r);
     }
     return s;
   }
@@ -200,7 +195,7 @@ class PosixBufferedWritableFile : public WritableFile {
   virtual Status Append(const Slice& data) {
     size_t r = fwrite_unlocked(data.data(), 1, data.size(), file_);
     if (r != data.size()) {
-      return IOError(filename_, errno);
+      return PosixError(filename_, errno);
     }
     return Status::OK();
   }
@@ -208,7 +203,7 @@ class PosixBufferedWritableFile : public WritableFile {
   virtual Status Close() {
     Status result;
     if (fclose(file_) != 0) {
-      result = IOError(filename_, errno);
+      result = PosixError(filename_, errno);
     }
     file_ = NULL;
     return result;
@@ -216,7 +211,7 @@ class PosixBufferedWritableFile : public WritableFile {
 
   virtual Status Flush() {
     if (fflush_unlocked(file_) != 0) {
-      return IOError(filename_, errno);
+      return PosixError(filename_, errno);
     }
     return Status::OK();
   }
@@ -237,10 +232,10 @@ class PosixBufferedWritableFile : public WritableFile {
     if (basename.starts_with("MANIFEST")) {
       int fd = open(dir.c_str(), O_RDONLY);
       if (fd < 0) {
-        s = IOError(dir, errno);
+        s = PosixError(dir, errno);
       } else {
         if (fsync(fd) < 0) {
-          s = IOError(dir, errno);
+          s = PosixError(dir, errno);
         }
         close(fd);
       }
@@ -279,7 +274,7 @@ class PosixWritableFile : public WritableFile {
     if (buf.empty()) return Status::OK();
     ssize_t nw = write(fd_, buf.data(), buf.size());
     if (nw != buf.size()) {
-      return IOError(filename_, errno);
+      return PosixError(filename_, errno);
     } else {
       return Status::OK();
     }
@@ -312,10 +307,10 @@ class PosixWritableFile : public WritableFile {
     if (basename.starts_with("MANIFEST")) {
       int fd = open(dir.c_str(), O_RDONLY);
       if (fd < 0) {
-        s = IOError(dir, errno);
+        s = PosixError(dir, errno);
       } else {
         if (fsync(fd) < 0) {
-          s = IOError(dir, errno);
+          s = PosixError(dir, errno);
         }
         close(fd);
       }
@@ -331,7 +326,7 @@ class PosixWritableFile : public WritableFile {
     } else {
       int r = fdatasync(fd_);
       if (r != 0) {
-        s = IOError(filename_, errno);
+        s = PosixError(filename_, errno);
       }
     }
 

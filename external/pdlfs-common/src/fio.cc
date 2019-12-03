@@ -21,7 +21,7 @@
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix_fio.h"
+#include "posix/posix_fio.h"
 #endif
 
 namespace pdlfs {

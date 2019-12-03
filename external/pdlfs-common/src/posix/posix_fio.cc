@@ -81,7 +81,7 @@ Status PosixFio::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
   if (fd != -1) {
     *fh = NewHandle(fd);
   } else {
-    s = IOError(fname, errno);
+    s = PosixError(fname, errno);
   }
   return s;
 }
@@ -96,14 +96,14 @@ Status PosixFio::Open(const Fentry& fentry, bool create_if_missing,
   std::string fname = FileName(fentry);
   int fd = open(fname.c_str(), O_RDWR | o1 | o2 | o3, DEFFILEMODE);
   if (fd == -1) {
-    s = IOError(fname, errno);
+    s = PosixError(fname, errno);
   }
 
   if (s.ok()) {
     struct stat statbuf;
     int r = fstat(fd, &statbuf);
     if (r != 0) {
-      s = IOError(fname, errno);
+      s = PosixError(fname, errno);
     } else {
       *fh = NewHandle(fd);
       *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
@@ -119,7 +119,7 @@ Status PosixFio::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
   Status s;
   struct stat statbuf;
   int r = fstat(ToFd(fh), &statbuf);
-  if (r != 0) return IOError(FileName(fentry), errno);
+  if (r != 0) return PosixError(FileName(fentry), errno);
   *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
   *size = statbuf.st_size;
   return s;
@@ -128,7 +128,7 @@ Status PosixFio::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
 Status PosixFio::Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
   Status s;
   ssize_t n = write(ToFd(fh), buf.data(), buf.size());
-  if (n == -1) return IOError(FileName(fentry), errno);
+  if (n == -1) return PosixError(FileName(fentry), errno);
   return s;
 }
 
@@ -136,7 +136,7 @@ Status PosixFio::Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
                         uint64_t off) {
   Status s;
   ssize_t n = pwrite(ToFd(fh), buf.data(), buf.size(), off);
-  if (n == -1) return IOError(FileName(fentry), errno);
+  if (n == -1) return PosixError(FileName(fentry), errno);
   return s;
 }
 
@@ -145,7 +145,7 @@ Status PosixFio::Read(const Fentry& fentry, Handle* fh, Slice* result,
   Status s;
   *result = Slice();
   ssize_t n = read(ToFd(fh), scratch, size);
-  if (n == -1) return IOError(FileName(fentry), errno);
+  if (n == -1) return PosixError(FileName(fentry), errno);
   *result = Slice(scratch, n);
   return s;
 }
@@ -155,7 +155,7 @@ Status PosixFio::Pread(const Fentry& fentry, Handle* fh, Slice* result,
   Status s;
   *result = Slice();
   ssize_t n = pread(ToFd(fh), scratch, size, off);
-  if (n == -1) return IOError(FileName(fentry), errno);
+  if (n == -1) return PosixError(FileName(fentry), errno);
   *result = Slice(scratch, n);
   return s;
 }
@@ -163,7 +163,7 @@ Status PosixFio::Pread(const Fentry& fentry, Handle* fh, Slice* result,
 Status PosixFio::Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
   Status s;
   int r = ftruncate(ToFd(fh), size);
-  if (r != 0) return IOError(FileName(fentry), errno);
+  if (r != 0) return PosixError(FileName(fentry), errno);
   return s;
 }
 
@@ -171,7 +171,7 @@ Status PosixFio::Flush(const Fentry& fentry, Handle* fh, bool force_sync) {
   Status s;
   if (!force_sync) return s;
   int r = fdatasync(ToFd(fh));
-  if (r != 0) return IOError(FileName(fentry), errno);
+  if (r != 0) return PosixError(FileName(fentry), errno);
   return s;
 }
 
@@ -186,7 +186,7 @@ Status PosixFio::Trunc(const Fentry& fentry, uint64_t size) {
   Status s;
   std::string fname = FileName(fentry);
   int r = truncate(fname.c_str(), size);
-  if (r != 0) return IOError(fname, errno);
+  if (r != 0) return PosixError(fname, errno);
   return s;
 }
 
@@ -195,7 +195,7 @@ Status PosixFio::Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size) {
   std::string fname = FileName(fentry);
   struct stat statbuf;
   int r = stat(fname.c_str(), &statbuf);
-  if (r != 0) return IOError(fname, errno);
+  if (r != 0) return PosixError(fname, errno);
   *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
   *size = statbuf.st_size;
   return s;
@@ -205,7 +205,7 @@ Status PosixFio::Drop(const Fentry& fentry) {
   Status s;
   std::string fname = FileName(fentry);
   int r = unlink(fname.c_str());
-  if (r != 0) return IOError(fname, errno);
+  if (r != 0) return PosixError(fname, errno);
   return s;
 }
 

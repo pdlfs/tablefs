@@ -120,7 +120,7 @@ void MercuryRPC::Remove(Timer* t) {
 
 void MercuryRPC::CheckTimers() {
   MutexLock ml(&mutex_);
-  uint64_t now = env_->NowMicros();
+  uint64_t now = CurrentMicros();
   for (Timer* t = timers_.next; t != &timers_;) {
     Timer* next = t->next;
     if (now >= t->due) {
@@ -136,7 +136,7 @@ void MercuryRPC::CheckTimers() {
 void MercuryRPC::AddTimerFor(hg_handle_t handle, Timer* timer) {
   MutexLock ml(&mutex_);
   timer->handle = handle;
-  timer->due = env_->NowMicros() + rpc_timeout_;
+  timer->due = CurrentMicros() + rpc_timeout_;
   Append(timer);
 }
 
