@@ -119,7 +119,7 @@ class Filesystem {
   // will be considered. Set mode to 0 to consider all file types.
   Status Lookup(const User& who, const Stat& parent_dir, const Slice& name,
                 uint32_t mode, Stat* stat);
-  Status Getdir(const User& who, const Stat& parent_dir, const Slice& name,
+  Status Fetchd(const User& who, const Stat& parent_dir, const Slice& name,
                 FilesystemDir** dir);
 
   // Insert a new filesystem node beneath a given parent directory.

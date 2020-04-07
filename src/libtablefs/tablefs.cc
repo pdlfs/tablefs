@@ -94,7 +94,7 @@ Status Filesystem::Opendir(  ///
     return status;
   }
 
-  status = Getdir(who, parent_dir, dirname, dir);
+  status = Fetchd(who, parent_dir, dirname, dir);
 
   return status;
 }
@@ -418,7 +418,7 @@ Status Filesystem::Insert(  ///
   return status;
 }
 
-Status Filesystem::Getdir(  ///
+Status Filesystem::Fetchd(  ///
     const User& who, const Stat& parent_dir, const Slice& name,
     FilesystemDir** dir) {
   if (!IsLookupOk(options_, parent_dir, who)) {
