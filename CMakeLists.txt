@@ -141,14 +141,12 @@ include (pdlfs-options)
 set (TABLEFS_PORT_LEVELDB "OFF" CACHE BOOL "Port to LEVELDB")
 set (TABLEFS_PORT_KVRANGE "OFF" CACHE BOOL "Port to KVRANGE")
 
-# user hooks to configure tablefs
-set (TABLEFS_COMMON_INTREE "OFF" CACHE BOOL
-     "Build in-tree common lib (for devel)")
-
 #
 # we build the in-tree pdlfs-common if TABLEFS_COMMON_INTREE is set,
 # otherwise we look for one already built in our install or prefix path.
 #
+set (TABLEFS_COMMON_INTREE "OFF" CACHE BOOL
+        "Build in-tree common lib (for devel)")
 if (TABLEFS_COMMON_INTREE)
     add_subdirectory (external/pdlfs-common/src)
 else ()
