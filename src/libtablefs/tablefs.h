@@ -105,9 +105,8 @@ class Filesystem {
                 const char* pathname, Stat* parent_dir, Slice* last_component,
                 const char** remaining_path);
 
-  // Retrieve information with the help of an in-memory cache. Cached
-  // information is returned as a reference-counted handle. This function is a
-  // wrapper function over "Lookup". Information is first attempted at a cache
+  // Retrieve information with the help of an in-memory cache. This function is
+  // a wrapper function over "Lookup". Information is first attempted at a cache
   // before the more costly "Lookup" is invoked. When "Lookup" is invoked, the
   // result will be inserted into the cache reducing future lookup cost.
   Status LookupWithCache(FilesystemLookupCache* const c, const User& who,
@@ -119,13 +118,14 @@ class Filesystem {
   // will be considered. Set mode to 0 to consider all file types.
   Status Lookup(const User& who, const Stat& parent_dir, const Slice& name,
                 uint32_t mode, Stat* stat);
-  Status Fetchd(const User& who, const Stat& parent_dir, const Slice& name,
+  // Initialize a directory handle for directory listing.
+  Status Dirhdl(const User& who, const Stat& parent_dir, const Slice& name,
                 FilesystemDir** dir);
 
   // Insert a new filesystem node beneath a given parent directory.
   // Return OK and the stat of the newly created filesystem node on success.
-  Status Insert(const User& who, const Stat& parent_dir, const Slice& name,
-                uint32_t mode, Stat* stat);
+  Status Put(const User& who, const Stat& parent_dir, const Slice& name,
+             uint32_t mode, Stat* stat);
 
   FilesystemLookupCache* cache_;
   FilesystemRoot* r_;

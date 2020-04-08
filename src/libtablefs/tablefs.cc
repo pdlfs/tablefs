@@ -94,7 +94,7 @@ Status Filesystem::Opendir(  ///
     return status;
   }
 
-  status = Fetchd(who, parent_dir, dirname, dir);
+  status = Dirhdl(who, parent_dir, dirname, dir);
 
   return status;
 }
@@ -128,7 +128,7 @@ Status Filesystem::Mkdir(  ///
 
   mode = S_IFDIR | (ALLPERMS & mode);
   Stat stat;
-  status = Insert(who, parent_dir, dirname, mode, &stat);
+  status = Put(who, parent_dir, dirname, mode, &stat);
 
   return status;
 }
@@ -152,7 +152,7 @@ Status Filesystem::Mkreg(  ///
 
   mode = S_IFREG | (ALLPERMS & mode);
   Stat stat;
-  status = Insert(who, parent_dir, fname, mode, &stat);
+  status = Put(who, parent_dir, fname, mode, &stat);
 
   return status;
 }
@@ -336,6 +336,8 @@ void DeleteStat(  /// Delete stat inside a cache entry
 }
 }  // namespace
 
+// This function is only called from pathname resolution.
+// So only directory information may be cached.
 Status Filesystem::LookupWithCache(  ///
     FilesystemLookupCache* const c, const User& who, const Stat& parent_dir,
     const Slice& name, uint32_t mode, Stat* stat) {
@@ -387,9 +389,9 @@ Status Filesystem::Lookup(  ///
   }
 }
 
-Status Filesystem::Insert(  ///
+Status Filesystem::Put(  ///
     const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
-    Stat* const stat) {
+    Stat* stat) {
   if (!IsDirWriteOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
@@ -418,7 +420,7 @@ Status Filesystem::Insert(  ///
   return status;
 }
 
-Status Filesystem::Fetchd(  ///
+Status Filesystem::Dirhdl(  ///
     const User& who, const Stat& parent_dir, const Slice& name,
     FilesystemDir** dir) {
   if (!IsLookupOk(options_, parent_dir, who)) {
