@@ -262,7 +262,7 @@ uint64_t Key::inode() const {
   uint64_t result;
 #if defined(DELTAFS_PROTO) || defined(TABLEFS) || defined(INDEXFS)
   uint64_t composite;
-  const size_t i = FS_KEY_PREFIX_LENGTH - 8;
+  const off_t i = FS_KEY_PREFIX_LENGTH - 8;
   memcpy(&composite, &rep_[i], 8);
   result = be64toh(composite) >> 8;
 #else
