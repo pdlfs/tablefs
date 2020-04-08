@@ -31,15 +31,18 @@ enum KeyType {
   kInoType = 7  // Dedicated inode entry that can be hard linked (tablefs only)
 };
 
-// Keys used for accessing metadata stored in KV-stores. In general, each key
-// consists of a prefix and suffix. The prefix encodes a parent directory id and
-// the type of the key as specified in KeyType. The suffix is typically either a
-// filename or a hash of it.
+// Keys for naming metadata stored in KV-stores. Each key has a type. In
+// general, a key consists of a prefix and a suffix. The prefix encodes parent
+// directory information and the type of the key. The suffix is typically either
+// a filename or a hash of it.
 class Key {
  public:
   Key() {}  // Intentionally not initialized for performance.
   // Initialize a key using a given prefix encoding.
   explicit Key(const Slice& prefix);
+#if defined(DELTAFS_PROTO)
+  Key(uint64_t dno, uint64_t ino, KeyType type);
+#endif
 #if defined(DELTAFS)
   Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type);
   Key(uint64_t snap, uint64_t ino, KeyType type);
@@ -49,7 +52,8 @@ class Key {
   Key(uint64_t ino, KeyType type);
   // Quickly initialize a key using information
   // provided by a LookupStat or Stat.
-#if defined(DELTAFS) || defined(INDEXFS)  // Tablefs does not use LookupStat
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || \
+    defined(INDEXFS)  // Tablefs does not use LookupStat
   Key(const LookupStat& stat, KeyType type);
 #endif
   Key(const Stat& stat, KeyType type);
@@ -58,11 +62,10 @@ class Key {
   // The following functions reset the suffix of
   // a key in different ways.
   void SetSuffix(const Slice& suff);
-  void SetIntegerUniquifier(uint64_t uni);
-
-  // Other alternatives for setting suffixes.
-  void SetName(const Slice& name);
   void SetOffset(uint64_t off);
+
+  // Other ways for setting suffixes.
+  void SetName(const Slice& name);  // Names may be stored as hashes
 #if defined(DELTAFS) || defined(INDEXFS)
   void SetHash(const Slice& hash);
 #endif
@@ -72,6 +75,9 @@ class Key {
   KeyType type() const;
   // Return the parent inode no. of a key.
   uint64_t inode() const;
+#if defined(DELTAFS_PROTO)
+  uint64_t dnode() const;
+#endif
 #if defined(DELTAFS)  // Return reg id and snap id individually.
   uint64_t snap_id() const;
   uint64_t reg_id() const;
@@ -85,16 +91,16 @@ class Key {
   Slice hash() const;
 #endif
 
-  // Return the complete encoding (prefix + suffix) of key.
+  // Return the final encoding of key.
   Slice Encode() const { return Slice(data(), size()); }
 
-  // Return the buf space. Deltafs and indexfs use immediate buf spaces.
+  // Return the raw bytes of a key. Indexfs uses immediate buf spaces.
 #if defined(DELTAFS) || defined(INDEXFS)
   size_t size() const { return size_; }
   const char* data() const { return rep_; }
   char* data() { return rep_; }
 
-  // Tablefs uses std::string.
+  // Deltafs and tablefs use std::string.
 #else
   size_t size() const { return rep_.size(); }
   const char* data() const { return &rep_[0]; }
@@ -102,15 +108,14 @@ class Key {
 #endif
 
  private:
-  // Deltafs and indexfs keys have fixed max length.
-  // So we use an immediate buf space.
+  // Indexfs keys have a small fixed length. So we use an immediate buf space.
 #if defined(DELTAFS) || defined(INDEXFS)
   // Intentionally copyable
   char rep_[50];
   size_t size_;
 
-  // Tablefs stores filenames in keys, which can
-  // be super lengthy. We use std::string.
+  // Deltafs and tablefs store intact filenames in keys.
+  // Filenames can be lengthy. So we use std::string.
 #else
   std::string rep_;
 #endif
@@ -118,6 +123,9 @@ class Key {
 
 // Common inode structure shared by deltafs, indexfs, and tablefs.
 class Stat {
+#if defined(DELTAFS_PROTO)
+  char file_dno_[8];
+#endif
 #if defined(DELTAFS)
   char reg_id_[8];
   char snap_id_[8];
@@ -125,7 +133,7 @@ class Stat {
   char file_ino_[8];
   char file_size_[8];
   char file_mode_[4];  // File type and access modes
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
   char zeroth_server_[4];
 #endif
   char user_id_[4];
@@ -135,6 +143,9 @@ class Stat {
   char change_time_[8];
 
 #ifndef NDEBUG
+#if defined(DELTAFS_PROTO)
+  bool is_file_dno_set_;
+#endif
 #if defined(DELTAFS)
   bool is_reg_id_set_;
   bool is_snap_id_set_;
@@ -142,7 +153,7 @@ class Stat {
   bool is_file_ino_set_;
   bool is_file_size_set_;
   bool is_file_mode_set_;
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
   bool is_zeroth_server_set_;
 #endif
   bool is_user_id_set_;
@@ -164,6 +175,9 @@ class Stat {
 
   void AssertAllSet() {
 #ifndef NDEBUG
+#if defined(DELTAFS_PROTO)
+    assert(is_file_dno_set_);
+#endif
 #if defined(DELTAFS)
     assert(is_reg_id_set_);
     assert(is_snap_id_set_);
@@ -171,7 +185,7 @@ class Stat {
     assert(is_file_ino_set_);
     assert(is_file_size_set_);
     assert(is_file_mode_set_);
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
     assert(is_zeroth_server_set_);
 #endif
     assert(is_user_id_set_);
@@ -181,6 +195,9 @@ class Stat {
 #endif
   }
 
+#if defined(DELTAFS_PROTO)
+  uint64_t DnodeNo() const { return DecodeFixed64(file_dno_); }
+#endif
 #if defined(DELTAFS)
   uint64_t RegId() const { return DecodeFixed64(reg_id_); }
   uint64_t SnapId() const { return DecodeFixed64(snap_id_); }
@@ -188,13 +205,22 @@ class Stat {
   uint64_t InodeNo() const { return DecodeFixed64(file_ino_); }
   uint64_t FileSize() const { return DecodeFixed64(file_size_); }
   uint32_t FileMode() const { return DecodeFixed32(file_mode_); }
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
   uint32_t ZerothServer() const { return DecodeFixed32(zeroth_server_); }
 #endif
   uint32_t UserId() const { return DecodeFixed32(user_id_); }
   uint32_t GroupId() const { return DecodeFixed32(group_id_); }
   uint64_t ModifyTime() const { return DecodeFixed64(modify_time_); }
   uint64_t ChangeTime() const { return DecodeFixed64(change_time_); }
+
+#if defined(DELTAFS_PROTO)
+  void SetDnodeNo(uint64_t file_dno) {
+    EncodeFixed64(file_dno_, file_dno);
+#ifndef NDEBUG
+    is_file_dno_set_ = true;
+#endif
+  }
+#endif
 
 #if defined(DELTAFS)
   void SetRegId(uint64_t reg_id) {
@@ -212,8 +238,8 @@ class Stat {
   }
 #endif
 
-  void SetInodeNo(uint64_t inode_no) {
-    EncodeFixed64(file_ino_, inode_no);
+  void SetInodeNo(uint64_t file_ino) {
+    EncodeFixed64(file_ino_, file_ino);
 #ifndef NDEBUG
     is_file_ino_set_ = true;
 #endif
@@ -233,7 +259,7 @@ class Stat {
 #endif
   }
 
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
   void SetZerothServer(uint32_t server) {
     EncodeFixed32(zeroth_server_, server);
 #ifndef NDEBUG
@@ -271,11 +297,14 @@ class Stat {
   }
 };
 
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
 // The result of lookup requests sent to clients during pathname resolution.
 // If the lease due date is not zero, the client may cache
 // and reuse the result until the specified due. Not used in tablefs.
 class LookupStat {
+#if defined(DELTAFS_PROTO)
+  char dir_dno_[8];
+#endif
 #if defined(DELTAFS)
   char reg_id_[8];
   char snap_id_[8];
@@ -289,6 +318,9 @@ class LookupStat {
   char lease_due_[8];
 
 #ifndef NDEBUG
+#if defined(DELTAFS_PROTO)
+  bool is_dir_dno_set_;
+#endif
 #if defined(DELTAFS)
   bool is_reg_id_set_;
   bool is_snap_id_set_;
@@ -314,6 +346,9 @@ class LookupStat {
 
   void AssertAllSet() {
 #ifndef NDEBUG
+#if defined(DELTAFS_PROTO)
+    assert(is_dir_dno_set_);
+#endif
 #if defined(DELTAFS)
     assert(is_reg_id_set_);
     assert(is_snap_id_set_);
@@ -327,6 +362,9 @@ class LookupStat {
 #endif
   }
 
+#if defined(DELTAFS_PROTO)
+  uint64_t DnodeNo() const { return DecodeFixed64(dir_dno_); }
+#endif
 #if defined(DELTAFS)
   uint64_t RegId() const { return DecodeFixed64(reg_id_); }
   uint64_t SnapId() const { return DecodeFixed64(snap_id_); }
@@ -337,6 +375,15 @@ class LookupStat {
   uint32_t UserId() const { return DecodeFixed32(user_id_); }
   uint32_t GroupId() const { return DecodeFixed32(group_id_); }
   uint64_t LeaseDue() const { return DecodeFixed64(lease_due_); }
+
+#if defined(DELTAFS_PROTO)
+  void SetDnodeNo(uint64_t dir_dno) {
+    EncodeFixed64(dir_dno_, dir_dno);
+#ifndef NDEBUG
+    is_dir_dno_set_ = true;
+#endif
+  }
+#endif
 
 #if defined(DELTAFS)
   void SetRegId(uint64_t reg_id) {
@@ -354,8 +401,8 @@ class LookupStat {
   }
 #endif
 
-  void SetInodeNo(uint64_t inode_no) {
-    EncodeFixed64(dir_ino_, inode_no);
+  void SetInodeNo(uint64_t dir_ino) {
+    EncodeFixed64(dir_ino_, dir_ino);
 #ifndef NDEBUG
     is_dir_ino_set_ = true;
 #endif
