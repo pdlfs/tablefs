@@ -47,14 +47,14 @@ void PosixLogger::Logv(const char* file, int line, int severity, int verbose,
     const time_t seconds = now_tv.tv_sec;
     struct tm t;
     localtime_r(&seconds, &t);
-    const char* m = "[I]";
+    char m = 'I';
     if (severity >= 2) {
-      m = "[E]";
+      m = 'E';
     } else if (severity == 1) {
-      m = "[W]";
+      m = 'W';
     }
-    p += snprintf(p, limit - p, "%s %04d/%02d/%02d-%02d:%02d:%02d.%06d %llx ",
-                  m, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
+    p += snprintf(p, limit - p, "%c%04d/%02d/%02d-%02d:%02d:%02d.%06d %llx ", m,
+                  t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
                   t.tm_min, t.tm_sec, static_cast<int>(now_tv.tv_usec),
                   static_cast<long long unsigned int>(thread_id));
 
@@ -64,6 +64,12 @@ void PosixLogger::Logv(const char* file, int line, int severity, int verbose,
       va_copy(backup_ap, ap);
       p += vsnprintf(p, limit - p, format, backup_ap);
       va_end(backup_ap);
+    }
+
+    // Print source code location
+    if (p < limit) {
+      const char* c = strrchr(file, '/');
+      p += snprintf(p, limit - p, " (%s:%d)", c ? c + 1 : file, line);
     }
 
     // Truncate to available space if necessary

@@ -75,10 +75,14 @@ TEST(KeyTest, KeyEnc3) {
   ASSERT_EQ(k1.Encode(), Slice(zero, k1.size()));
   Key k2(1, static_cast<KeyType>(1));
   k2.SetName(Slice("X"));
+#if !defined(DELTAFS) && !defined(INDEXFS)
   ASSERT_EQ(k2.suffix(), Slice("X"));
+#endif
   Key k3(1, static_cast<KeyType>(1));
   k3.SetName(Slice("Y"));
+#if !defined(DELTAFS) && !defined(INDEXFS)
   ASSERT_EQ(k3.suffix(), Slice("Y"));
+#endif
   ASSERT_EQ(k2.prefix(), k3.prefix());
 }
 

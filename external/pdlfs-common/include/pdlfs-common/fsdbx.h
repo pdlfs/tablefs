@@ -102,7 +102,7 @@ template <typename DX = DB, typename xslice = Slice,  // Foreign slice
               Status,  // Foreign db status type to which we must port
           MXDBFormat fmt = kNameInValue>
 class MXDB {
- protected:
+ public:
   explicit MXDB(DX* dx) : dx_(dx) {}
   ~MXDB();
 
