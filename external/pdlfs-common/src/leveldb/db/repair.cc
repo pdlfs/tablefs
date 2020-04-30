@@ -21,12 +21,11 @@
 #include "version_edit.h"
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-
 #include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/infolog.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/env.h"
@@ -99,12 +98,12 @@ class Repairer {
       for (size_t i = 0; i < tables_.size(); i++) {
         bytes += tables_[i].meta.file_size;
       }
-      xLog(options_.info_log, 3,
-           "**** Repaired leveldb %s; "
-           "recovered %d files; %llu bytes. "
-           "Some data may have been lost. "
-           "****",
-           dbname_.c_str(), static_cast<int>(tables_.size()), bytes);
+      Log(options_.info_log, 3,
+          "**** Repaired leveldb %s; "
+          "recovered %d files; %llu bytes. "
+          "Some data may have been lost. "
+          "****",
+          dbname_.c_str(), static_cast<int>(tables_.size()), bytes);
     }
     return status;
   }
@@ -170,8 +169,8 @@ class Repairer {
       const std::string fname = LogFileName(dbname_, logs_[i]);
       Status status = ConvertLogToTable(logs_[i]);
       if (!status.ok()) {
-        xLog(options_.info_log, 3, "Log #%llu: ignoring conversion error: %s",
-             (unsigned long long)logs_[i], status.ToString().c_str());
+        Log(options_.info_log, 3, "Log #%llu: ignoring conversion error: %s",
+            (unsigned long long)logs_[i], status.ToString().c_str());
       }
       ArchiveFile(fname);
     }
@@ -184,9 +183,9 @@ class Repairer {
       uint64_t lognum;
       virtual void Corruption(size_t bytes, const Status& s) {
         // We print error messages for corruption, but continue repairing.
-        xLog(info_log, 3, "Log #%llu: dropping %d bytes; %s",
-             (unsigned long long)lognum, static_cast<int>(bytes),
-             s.ToString().c_str());
+        Log(info_log, 3, "Log #%llu: dropping %d bytes; %s",
+            (unsigned long long)lognum, static_cast<int>(bytes),
+            s.ToString().c_str());
       }
     };
 
@@ -228,8 +227,8 @@ class Repairer {
       if (status.ok()) {
         counter += WriteBatchInternal::Count(&batch);
       } else {
-        xLog(options_.info_log, 3, "Log #%llu: ignoring %s",
-             (unsigned long long)log, status.ToString().c_str());
+        Log(options_.info_log, 3, "Log #%llu: ignoring %s",
+            (unsigned long long)log, status.ToString().c_str());
         status = Status::OK();  // Keep going with rest of file
       }
     }
@@ -252,9 +251,9 @@ class Repairer {
         table_numbers_.push_back(meta.number);
       }
     }
-    xLog(options_.info_log, 3, "Log #%llu: %d ops saved to Table #%llu %s",
-         (unsigned long long)log, counter, (unsigned long long)meta.number,
-         status.ToString().c_str());
+    Log(options_.info_log, 3, "Log #%llu: %d ops saved to Table #%llu %s",
+        (unsigned long long)log, counter, (unsigned long long)meta.number,
+        status.ToString().c_str());
     return status;
   }
 
@@ -289,8 +288,8 @@ class Repairer {
     if (!status.ok()) {
       ArchiveFile(TableFileName(dbname_, number));
       ArchiveFile(SSTTableFileName(dbname_, number));
-      xLog(options_.info_log, 3, "Table #%llu: dropped: %s",
-           (unsigned long long)t.meta.number, status.ToString().c_str());
+      Log(options_.info_log, 3, "Table #%llu: dropped: %s",
+          (unsigned long long)t.meta.number, status.ToString().c_str());
       return;
     }
 
@@ -303,8 +302,8 @@ class Repairer {
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       Slice key = iter->key();
       if (!ParseInternalKey(key, &parsed)) {
-        xLog(options_.info_log, 3, "Table #%llu: unparsable key %s",
-             (unsigned long long)t.meta.number, EscapeString(key).c_str());
+        Log(options_.info_log, 3, "Table #%llu: unparsable key %s",
+            (unsigned long long)t.meta.number, EscapeString(key).c_str());
         continue;
       }
 
@@ -322,8 +321,8 @@ class Repairer {
       status = iter->status();
     }
     delete iter;
-    xLog(options_.info_log, 3, "Table #%llu: %d entries %s",
-         (unsigned long long)t.meta.number, counter, status.ToString().c_str());
+    Log(options_.info_log, 3, "Table #%llu: %d entries %s",
+        (unsigned long long)t.meta.number, counter, status.ToString().c_str());
 
     if (status.ok()) {
       tables_.push_back(t);
@@ -376,8 +375,8 @@ class Repairer {
       const std::string orig = TableFileName(dbname_, t.meta.number);
       s = env_->RenameFile(copy.c_str(), orig.c_str());
       if (s.ok()) {
-        xLog(options_.info_log, 3, "Table #%llu: %d entries repaired",
-             (unsigned long long)t.meta.number, counter);
+        Log(options_.info_log, 3, "Table #%llu: %d entries repaired",
+            (unsigned long long)t.meta.number, counter);
         tables_.push_back(t);
       }
     }
@@ -463,8 +462,8 @@ class Repairer {
     new_file.append("/");
     new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
     Status s = env_->RenameFile(fname.c_str(), new_file.c_str());
-    xLog(options_.info_log, 3, "Archiving %s: %s", fname.c_str(),
-         s.ToString().c_str());
+    Log(options_.info_log, 3, "Archiving %s: %s", fname.c_str(),
+        s.ToString().c_str());
   }
 };
 

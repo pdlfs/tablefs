@@ -16,22 +16,34 @@
  */
 #pragma once
 
-#include "pdlfs-common/coding.h"
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
-#include "pdlfs-common/leveldb/slice_transform.h"
+#include "pdlfs-common/leveldb/types.h"
+
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
 
-#include <stdio.h>
-
 namespace pdlfs {
+// Grouping of constants. We may want to make some of these parameters set via
+// options.
+namespace config {
+static const int kNumLevels = 7;
 
+// Maximum level to which a new compacted memtable is pushed if it does not
+// create overlap. We try to push to level 2 to avoid the relatively expensive
+// level 0=>1 compactions and to avoid some expensive manifest file operations.
+// We do not push all the way to the largest level since that can generate a lot
+// of wasted disk space if the same key space is being repeatedly overwritten.
+static const int kMaxMemCompactLevel = 2;
+
+// Approximate gap in bytes between samples of data read during iteration.
+static const int kReadBytesPeriod = 1048576;
+}  // namespace config
 class InternalKey;
 
-// Value types encoded as the last component of internal keys.
-// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
-// data structures.
+// Value types encoded as the last component of internal keys. DO NOT CHANGE
+// THESE ENUM VALUES: they are embedded in the on-disk data structures.
 enum ValueType {
   kTypeDeletion = 0x0,  // Tombstone
   kTypeValue = 0x1
@@ -45,7 +57,6 @@ enum ValueType {
 // ValueType, not the lowest).
 static const ValueType kValueTypeForSeek = kTypeValue;
 
-typedef uint64_t SequenceNumber;
 typedef int64_t SequenceOff;
 
 // We leave eight bits empty at the bottom so a type and sequence#
@@ -217,57 +228,4 @@ inline LookupKey::~LookupKey() {
   }
 }
 
-class Buffer {
- protected:
-  virtual ~Buffer() {}
-
- public:
-  virtual void Fill(const char* data, size_t size) = 0;
-};
-
-namespace buffer {
-class StringBuf : public Buffer {
- public:
-  virtual ~StringBuf() {}
-  explicit StringBuf(std::string* s) : s_(s) {}
-
-  virtual void Fill(const char* data, size_t size) {
-    if (size != 0) {
-      s_->assign(data, size);
-    }
-  }
-
- private:
-  std::string* s_;
-};
-
-class DirectBuf : public Buffer {
- public:
-  virtual ~DirectBuf() {}
-  explicit DirectBuf(char* p, size_t s) : p_(p), size_(s) {
-    assert(p_ != NULL);
-  }
-
-  virtual void Fill(const char* data, size_t size) {
-    if (size > size_) {
-      // We run out of space, so we record the size
-      // so the application can retry with a large enough buffer next time.
-      data_ = Slice(NULL, size);
-    } else {
-      data_ = Slice(p_, size);
-      if (size != 0) {
-        memcpy(p_, data, size);
-      }
-    }
-  }
-
-  Slice Read() { return data_; }
-
- private:
-  Slice data_;
-  char* p_;
-  size_t size_;
-};
-
-}  // namespace buffer
 }  // namespace pdlfs

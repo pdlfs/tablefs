@@ -10,7 +10,7 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/db.h"
 
 namespace pdlfs {
 

@@ -15,7 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/strutil.h"
 #include "pdlfs-common/testharness.h"
 

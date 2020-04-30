@@ -117,12 +117,12 @@ class MXDB {
     return tx;
   }
 
-  template <typename KX, typename TX, typename OPT>
+  template <typename KX, typename TX, typename OPT, typename PERF>
   Status GET(const DirId& id, const Slice& suf, Stat* stat, std::string* name,
-             OPT* opt, TX* tx);
-  template <typename KX, typename TX, typename OPT>
-  Status SET(const DirId& id, const Slice& suf, const Stat& stat,
-             const Slice& name, OPT* opt, TX* tx);
+             OPT* opt, TX* tx, PERF* perf);
+  template <typename KX, typename TX, typename OPT, typename PERF>
+  Status PUT(const DirId& id, const Slice& suf, const Stat& stat,
+             const Slice& name, OPT* opt, TX* tx, PERF* perf);
   template <typename KX, typename TX, typename OPT>
   Status DELETE(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
@@ -192,10 +192,10 @@ MXDB<DX, xslice, xstatus, fmt>::~MXDB() {  ////
 #endif
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
-template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::SET(  ////
+template <typename KX, typename TX, typename OPT, typename PERF>
+Status MXDB<DX, xslice, xstatus, fmt>::PUT(  ////
     const DirId& id, const Slice& suf, const Stat& stat, const Slice& name,
-    OPT* opt, TX* tx) {
+    OPT* opt, TX* tx, PERF* perf) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -230,14 +230,21 @@ Status MXDB<DX, xslice, xstatus, fmt>::SET(  ////
     tx->bat.Put(keyenc, value);
   }
 
+  // Collect performance stats
+  if (perf != NULL) {
+    perf->putkeybytes += keyenc.size();
+    perf->putbytes += value.size();
+    perf->puts++;
+  }
+
   return s;
 }
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
-template <typename KX, typename TX, typename OPT>
+template <typename KX, typename TX, typename OPT, typename PERF>
 Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
     const DirId& id, const Slice& suf, Stat* stat, std::string* name, OPT* opt,
-    TX* tx) {
+    TX* tx, PERF* perf) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -264,6 +271,14 @@ Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
   } else {
     s = XSTATUS(st);
   }
+
+  // Collect performance stats
+  if (perf != NULL) {
+    perf->getkeybytes += keyenc.size();
+    perf->getbytes += tmp.size();
+    perf->gets++;
+  }
+
   return s;
 }
 

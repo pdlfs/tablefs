@@ -19,8 +19,8 @@
 #include "version_set.h"
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/table.h"
 
@@ -1802,7 +1802,7 @@ TEST(DBTest, MissingSSTFile) {
   ASSERT_TRUE(s.ToString().find("issing") != std::string::npos) << s.ToString();
 }
 
-TEST(DBTest, StillReadSST) {
+TEST(DBTest, NoLongerReadSST) {
   ASSERT_OK(Put("foo", "bar"));
   ASSERT_EQ("bar", Get("foo"));
 
@@ -1815,7 +1815,7 @@ TEST(DBTest, StillReadSST) {
   options.paranoid_checks = true;
   Status s = TryReopen(&options);
   ASSERT_TRUE(s.ok());
-  ASSERT_EQ("bar", Get("foo"));
+  ASSERT_EQ("NOT_FOUND", Get("foo"));
 }
 
 TEST(DBTest, FilesDeletedAfterCompaction) {

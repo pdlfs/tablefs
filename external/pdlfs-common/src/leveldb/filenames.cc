@@ -14,7 +14,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/strutil.h"
 
@@ -51,13 +51,6 @@ std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
   assert(number > 0);
   char buf[100];
   snprintf(buf, sizeof(buf), "/MANIFEST-%06llu",
-           static_cast<unsigned long long>(number));
-  return dbname + buf;
-}
-
-std::string ColumnName(const std::string& dbname, uint64_t number) {
-  char buf[100];
-  snprintf(buf, sizeof(buf), "/COLUMN-%06llu",
            static_cast<unsigned long long>(number));
   return dbname + buf;
 }

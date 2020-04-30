@@ -16,8 +16,8 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/iterator.h"
+#include "pdlfs-common/leveldb/options.h"
 
 #include <stdint.h>
 #include <stdio.h>
