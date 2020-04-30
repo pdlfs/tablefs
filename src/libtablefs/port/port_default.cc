@@ -31,12 +31,20 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include "port_default.h"
 
 namespace pdlfs {
 
 MDBOptions::MDBOptions(DB* db) : db(db) {}
+
+struct MDBStats {
+  uint64_t putkeybytes;
+  uint64_t putbytes;
+  uint64_t puts;
+  uint64_t getkeybytes;
+  uint64_t getbytes;
+  uint64_t gets;
+};
 
 struct MDB::Tx {
   const Snapshot* snap;
@@ -68,13 +76,15 @@ Status MDB::Flush() {  ///
 Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
   ReadOptions read_opts;
   Tx* const tx = NULL;
-  return GET<Key>(id, fname, stat, NULL, &read_opts, tx);
+  MDBStats stats;
+  return GET<Key>(id, fname, stat, NULL, &read_opts, tx, &stats);
 }
 
 Status MDB::Set(const DirId& id, const Slice& fname, const Stat& stat) {
   WriteOptions write_opts;
   Tx* const tx = NULL;
-  return SET<Key>(id, fname, stat, fname, &write_opts, tx);
+  MDBStats stats;
+  return PUT<Key>(id, fname, stat, fname, &write_opts, tx, &stats);
 }
 
 Status MDB::Delete(const DirId& id, const Slice& fname) {
