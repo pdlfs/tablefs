@@ -31,11 +31,16 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
-
-#include "pdlfs-common/leveldb/db.h"
+#include "tablefs_db.h"
 
 namespace pdlfs {
-// The DestroyDb port is a bit too hacky. Is this a prob? Maybe not.
-#define DestroyDb(x) DestroyDB(x, DBOptions())  // Remove the contents of a DB
+
+FilesystemDbStats::FilesystemDbStats()
+    : putkeybytes(0),
+      putbytes(0),
+      puts(0),
+      getkeybytes(0),
+      getbytes(0),
+      gets(0) {}
+
 }  // namespace pdlfs

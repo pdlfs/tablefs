@@ -33,10 +33,8 @@
  */
 #pragma once
 
-#include "port.h"
-
-#include "pdlfs-common/fsdbx.h"
-#include "pdlfs-common/port.h"
+#include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/status.h"
 
 #include <stdint.h>
 #include <string>
@@ -63,6 +61,9 @@ struct User {
   // XXX: more groups
 };
 
+class FilesystemDb;
+// A prototype implementation of TableFS as published in USENIX ATC 2013:
+//  - https://www.usenix.org/node/174519
 class Filesystem {
  public:
   explicit Filesystem(const FilesystemOptions& options);
@@ -137,8 +138,7 @@ class Filesystem {
   void operator=(const Filesystem& fs);
   Filesystem(const Filesystem&);
   FilesystemOptions options_;
-  MDB::Db* db_;
-  MDB* mdb_;
+  FilesystemDb* db_;
 };
 
 }  // namespace pdlfs

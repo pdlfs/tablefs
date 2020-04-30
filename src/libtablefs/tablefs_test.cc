@@ -32,6 +32,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "tablefs.h"
+#include "port.h"
 
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/random.h"
@@ -47,7 +48,7 @@ class FilesystemTest {
  public:
   FilesystemTest() {
     fsloc_ = test::TmpDir() + "/filesystem_test";
-    DestroyDb(fsloc_, MDB::DbOpts());
+    DestroyDb(fsloc_);
     fs_ = new Filesystem(options_);
     me.uid = 1;
     me.gid = 1;
@@ -272,7 +273,7 @@ class FilesystemLoader {
   }
 
   void Run() {
-    DestroyDb(fsloc_, MDB::DbOpts());
+    DestroyDb(fsloc_);
     Filesystem* const fs = new Filesystem(options_);
     ASSERT_OK(fs->OpenFilesystem(fsloc_));
     std::string path("/");

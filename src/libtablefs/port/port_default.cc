@@ -31,80 +31,107 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "port_default.h"
+#include "../tablefs_db.h"
+
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/readonly.h"
+#include "pdlfs-common/leveldb/snapshot.h"
+#include "pdlfs-common/leveldb/write_batch.h"
+#include "pdlfs-common/status.h"
 
 namespace pdlfs {
-
-MDBOptions::MDBOptions(DB* db) : db(db) {}
-
-struct MDBStats {
-  uint64_t putkeybytes;
-  uint64_t putbytes;
-  uint64_t puts;
-  uint64_t getkeybytes;
-  uint64_t getbytes;
-  uint64_t gets;
+namespace port {
+// An MXDB template instantiation that binds to our own DB implementation. Our
+// DB is a modified LevelDB realization of an LSM-tree. Our modification enables
+// deeper LSM-tree customization, true readonly db access, and bulk sstable
+// insertion operation.
+typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
+}  // namespace port
+struct FilesystemDb::Rep {
+  Rep();
+  port::MDB* mdb;
+  DB* db;
 };
-
-struct MDB::Tx {
+namespace {
+Status OpenDb(const FilesystemOptions& options, const std::string& dbloc,
+              DB** db) {
+  DBOptions dbopts;  // XXX: filter? block cache? table cache?
+  dbopts.create_if_missing = !options.rdonly;
+  dbopts.disable_seek_compaction = true;
+  dbopts.skip_lock_file = true;
+  if (options.rdonly) return ReadonlyDB::Open(dbopts, dbloc, db);
+  return DB::Open(dbopts, dbloc, db);
+}
+struct Tx {  // Db transaction. Not used, but required by the MXDB code.
   const Snapshot* snap;
   WriteBatch bat;
 };
+Tx* const NULLTX = NULL;
+}  // namespace
 
-MDB::MDB(const MDBOptions& opts) : MXDB(opts.db) {}
-
-MDB::~MDB() {}
-
-Status MDB::Open(const DbOpts& dbopts, const std::string& dbloc, bool rdonly,
-                 Db** dbptr) {
-  if (rdonly) return ReadonlyDB::Open(dbopts, dbloc, dbptr);
-  return Db::Open(dbopts, dbloc, dbptr);
+Status FilesystemDb::Open(const std::string& dbloc) {
+  Status s = OpenDb(options_, dbloc, &rep_->db);
+  if (s.ok()) {
+    rep_->mdb = new port::MDB(rep_->db);
+  }
+  return s;
 }
 
-Status MDB::SaveFsroot(const Slice& encoding) {
-  return dx_->Put(WriteOptions(), "/", encoding);
+Status FilesystemDb::SaveFsroot(const Slice& root_encoding) {
+  return rep_->db->Put(WriteOptions(), "/", root_encoding);
 }
 
-Status MDB::LoadFsroot(std::string* tmp) {
-  return dx_->Get(ReadOptions(), "/", tmp);
+Status FilesystemDb::LoadFsroot(std::string* tmp) {
+  return rep_->db->Get(ReadOptions(), "/", tmp);
 }
 
-Status MDB::Flush() {  ///
-  return dx_->FlushMemTable(FlushOptions());
+Status FilesystemDb::Flush() { return rep_->db->FlushMemTable(FlushOptions()); }
+
+Status FilesystemDb::Get(const DirId& id, const Slice& fname, Stat* stat,
+                         FilesystemDbStats* stats) {
+  ReadOptions myreadopts;
+  return rep_->mdb->GET<Key>(id, fname, stat, NULL, &myreadopts, NULLTX, stats);
 }
 
-Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
-  ReadOptions read_opts;
-  Tx* const tx = NULL;
-  MDBStats stats;
-  return GET<Key>(id, fname, stat, NULL, &read_opts, tx, &stats);
+Status FilesystemDb::Put(const DirId& id, const Slice& fname, const Stat& stat,
+                         FilesystemDbStats* stats) {
+  WriteOptions mywriteopts;
+  return rep_->mdb->PUT<Key>(id, fname, stat, fname, &mywriteopts, NULLTX,
+                             stats);
 }
 
-Status MDB::Set(const DirId& id, const Slice& fname, const Stat& stat) {
-  WriteOptions write_opts;
-  Tx* const tx = NULL;
-  MDBStats stats;
-  return PUT<Key>(id, fname, stat, fname, &write_opts, tx, &stats);
+Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
+  WriteOptions myopts;
+  return rep_->mdb->DELETE<Key>(id, fname, &myopts, NULLTX);
 }
 
-Status MDB::Delete(const DirId& id, const Slice& fname) {
-  WriteOptions write_opts;
-  Tx* const tx = NULL;
-  return DELETE<Key>(id, fname, &write_opts, tx);
+FilesystemDb::Dir* FilesystemDb::Opendir(const DirId& dir_id) {
+  ReadOptions myreadopts;
+  return reinterpret_cast<Dir*>(
+      rep_->mdb->OPENDIR<Iterator, Key>(dir_id, &myreadopts, NULLTX));
 }
 
-MDB::Dir* MDB::Opendir(const DirId& id) {
-  ReadOptions read_opts;
-  Tx* const tx = NULL;
-  return OPENDIR<Iterator, Key>(id, &read_opts, tx);
+Status FilesystemDb::Readdir(Dir* dir, Stat* stat, std::string* name) {
+  return rep_->mdb->READDIR<Iterator>(
+      reinterpret_cast<port::MDB::Dir<Iterator>*>(dir), stat, name);
 }
 
-Status MDB::Readdir(Dir* dir, Stat* stat, std::string* name) {
-  return READDIR<Iterator>(dir, stat, name);
+void FilesystemDb::Closedir(Dir* dir) {
+  return rep_->mdb->CLOSEDIR(reinterpret_cast<port::MDB::Dir<Iterator>*>(dir));
 }
 
-void MDB::Closedir(MDB::Dir* dir) {
-  return CLOSEDIR(dir);  // This also deletes dir
+FilesystemDb::FilesystemDb(const FilesystemOptions& options)
+    : options_(options), rep_(new Rep()) {}
+
+FilesystemDb::Rep::Rep() : mdb(NULL), db(NULL) {}
+
+FilesystemDb::~FilesystemDb() {
+  delete rep_->mdb;
+  delete rep_->db;
+  delete rep_;
 }
 
 }  // namespace pdlfs

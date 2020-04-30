@@ -32,6 +32,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "tablefs.h"
+#include "tablefs_db.h"
 
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mutexlock.h"
@@ -101,13 +102,13 @@ Status Filesystem::Opendir(  ///
 
 Status Filesystem::Readdir(  ///
     FilesystemDir* dir, Stat* stat, std::string* name) {
-  MDB::Dir* d = reinterpret_cast<MDB::Dir*>(dir);
-  return mdb_->Readdir(d, stat, name);
+  FilesystemDb::Dir* d = reinterpret_cast<FilesystemDb::Dir*>(dir);
+  return db_->Readdir(d, stat, name);
 }
 
 Status Filesystem::Closdir(FilesystemDir* dir) {
-  MDB::Dir* d = reinterpret_cast<MDB::Dir*>(dir);
-  mdb_->Closedir(d);
+  FilesystemDb::Dir* d = reinterpret_cast<FilesystemDb::Dir*>(dir);
+  db_->Closedir(d);
   return Status::OK();
 }
 
@@ -379,7 +380,7 @@ Status Filesystem::Lookup(  ///
   if (!IsLookupOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
-  Status status = mdb_->Get(DirId(parent_dir), name, stat);
+  Status status = db_->Get(DirId(parent_dir), name, stat, NULL);
   if (!status.ok()) {
     return status;
   } else if ((stat->FileMode() & mode) != mode) {
@@ -398,7 +399,7 @@ Status Filesystem::Put(  ///
   Status status;
   const DirId pdir(parent_dir);
   if (!options_.skip_name_collision_checks) {
-    status = mdb_->Get(pdir, name, stat);
+    status = db_->Get(pdir, name, stat, NULL);
     if (status.ok()) {
       return Status::AlreadyExists(Slice());
     } else if (!status.IsNotFound()) {
@@ -415,7 +416,7 @@ Status Filesystem::Put(  ///
   stat->SetChangeTime(0);
   stat->AssertAllSet();
 
-  status = mdb_->Set(pdir, name, *stat);
+  status = db_->Put(pdir, name, *stat, NULL);
 
   return status;
 }
@@ -431,7 +432,7 @@ Status Filesystem::Dirhdl(  ///
   const Stat* stat = &r_->rootstat;
   Status status;
   if (!name.empty()) {  // No need to get if target is root
-    status = mdb_->Get(pdir, name, &tmp);
+    status = db_->Get(pdir, name, &tmp, NULL);
     if (!status.ok()) {
       return status;
     } else if (!S_ISDIR(tmp.FileMode())) {  // Must be a dir
@@ -442,7 +443,7 @@ Status Filesystem::Dirhdl(  ///
   if (!IsDirReadOk(options_, *stat, who)) {
     return Status::AccessDenied(Slice());
   } else {
-    *dir = reinterpret_cast<FilesystemDir*>(mdb_->Opendir(DirId(*stat)));
+    *dir = reinterpret_cast<FilesystemDir*>(db_->Opendir(DirId(*stat)));
     return status;
   }
 }
@@ -477,7 +478,7 @@ FilesystemOptions::FilesystemOptions()
       rdonly(false) {}
 
 Filesystem::Filesystem(const FilesystemOptions& options)
-    : cache_(NULL), r_(NULL), options_(options), db_(NULL), mdb_(NULL) {
+    : cache_(NULL), r_(NULL), options_(options), db_(NULL) {
   if (options_.size_lookup_cache) {
     cache_ = new FilesystemLookupCache(options_.size_lookup_cache);
   }
@@ -497,52 +498,44 @@ inline void FormatFilesystem(Stat* const root) {
 }  // namespace
 
 Status Filesystem::OpenFilesystem(const std::string& fsloc) {
-  r_ = new FilesystemRoot;
-  MDB::DbOpts dbopts;
-  dbopts.create_if_missing = !options_.rdonly;
-  Status status = MDB::Open(dbopts, fsloc, options_.rdonly, &db_);
-  if (!status.ok()) {
-    return status;
-  }
-  mdb_ = new MDB(MDBOptions(db_));
-  status = mdb_->LoadFsroot(&prev_r_);
-  if (status.IsNotFound()) {  // This is a new fs image
-    FormatFilesystem(&r_->rootstat);
-    r_->inoseq = 2;
-    status = Status::OK();
-  } else if (status.ok()) {
-    if (!DecodeFrom(r_, prev_r_)) {
-      status = Status::Corruption("Cannot recover fs root");
+  db_ = new FilesystemDb(options_);
+  Status s = db_->Open(fsloc);
+  if (s.ok()) {
+    s = db_->LoadFsroot(&prev_r_);
+    if (s.IsNotFound()) {  // This is a new fs image
+      r_ = new FilesystemRoot;
+      FormatFilesystem(&r_->rootstat);
+      r_->inoseq = 2;
+      s = Status::OK();
+    } else if (s.ok()) {
+      r_ = new FilesystemRoot;
+      if (!DecodeFrom(r_, prev_r_)) {
+        s = Status::Corruption("Cannot recover fs root");
+      }
     }
   }
-  if (!status.ok()) {
-    // If we fail we are sunk. To indicate so we delete mdb_ and r_. We keep db_
-    // and prev_r_ as is. db_ will be deleted eventually if created.
-    delete mdb_;
-    mdb_ = NULL;
+  // We indicate error by deleting db_ and r_ and setting them to NULL.
+  if (!s.ok()) {
+    delete db_;
+    db_ = NULL;
     delete r_;
     r_ = NULL;
   }
-  return status;
+  return s;
 }
 
 Filesystem::~Filesystem() {
   char tmp[200];
-  if (r_ && mdb_ && !options_.rdonly) {
+  if (!options_.rdonly && r_ && db_) {
     Slice encoding = EncodeTo(r_, tmp);
     if (encoding != prev_r_) {
-      mdb_->SaveFsroot(encoding);
+      db_->SaveFsroot(encoding);
     }
-    mdb_->Flush();
+    db_->Flush();
   }
-  delete mdb_;
+  delete cache_;
+  delete db_;
   delete r_;
-  if (cache_) {
-    delete cache_;
-  }
-  if (db_) {
-    delete db_;
-  }
 }
 
 }  // namespace pdlfs

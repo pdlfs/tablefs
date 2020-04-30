@@ -33,9 +33,60 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db.h"
+#include "tablefs.h"
+
+#include "pdlfs-common/fsdbx.h"
+
+#include <stdint.h>
 
 namespace pdlfs {
-// The DestroyDb port is a bit too hacky. Is this a prob? Maybe not.
-#define DestroyDb(x) DestroyDB(x, DBOptions())  // Remove the contents of a DB
+
+// Db performance stats.
+struct FilesystemDbStats {
+  FilesystemDbStats();
+  // Total amount of key bytes pushed to db.
+  uint64_t putkeybytes;
+  // Total amount of val bytes pushed to db.
+  uint64_t putbytes;
+  // Total number of put operations.
+  uint64_t puts;
+  // Total number of key bytes read out of db.
+  uint64_t getkeybytes;
+  // Total number of val bytes read out of db.
+  uint64_t getbytes;
+  // Total number of get operations.
+  uint64_t gets;
+};
+
+class FilesystemDb {
+ public:
+  explicit FilesystemDb(const FilesystemOptions& options);
+  ~FilesystemDb();
+
+  Status Open(const std::string& dbloc);
+  Status SaveFsroot(const Slice& root_encoding);
+  Status LoadFsroot(std::string* tmp);
+  Status Flush();
+
+  Status Get(const DirId& parent, const Slice& name, Stat* stat,
+             FilesystemDbStats* stats);
+  Status Put(const DirId& parent, const Slice& name, const Stat& stat,
+             FilesystemDbStats* stats);
+  Status Delete(const DirId& parent, const Slice& name);
+
+  struct Dir;
+  Dir* Opendir(const DirId& dir_id);
+  Status Readdir(Dir* dir, Stat* stat, std::string* name);
+  void Closedir(Dir* dir);
+
+ private:
+  void operator=(const FilesystemDb& fsdb);  // No copying allowed
+  FilesystemDb(const FilesystemDb&);
+
+  FilesystemOptions options_;
+
+  struct Rep;
+  Rep* rep_;
+};
+
 }  // namespace pdlfs

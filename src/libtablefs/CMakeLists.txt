@@ -45,7 +45,7 @@
 #
 
 # main directory sources and tests
-set (tablefs-srcs tablefs.cc tablefs_api.cc)
+set (tablefs-srcs tablefs.cc tablefs_db.cc tablefs_api.cc )
 set (tablefs-tests tablefs_test.cc tablefs_api_test.cc)
 
 # configure/load in standard modules we plan to use

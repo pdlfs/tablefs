@@ -47,7 +47,7 @@ class FilesystemAPI {
  public:
   FilesystemAPI() {
     fsloc_ = test::TmpDir() + "/filesystem_api_test";
-    DestroyDb(fsloc_, MDB::DbOpts());
+    DestroyDb(fsloc_);
     fs_ = tablefs_newfshdl();
   }
 
