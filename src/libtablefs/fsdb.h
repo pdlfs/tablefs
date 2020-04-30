@@ -33,7 +33,7 @@
  */
 #pragma once
 
-#include "tablefs.h"
+#include "fs.h"
 
 #include "pdlfs-common/fsdbx.h"
 

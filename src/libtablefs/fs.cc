@@ -31,8 +31,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "tablefs.h"
-#include "tablefs_db.h"
+#include "fs.h"
+#include "fsdb.h"
 
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mutexlock.h"

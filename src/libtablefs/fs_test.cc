@@ -31,11 +31,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "tablefs.h"
+#include "fs.h"
 #include "port.h"
 
 #include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/random.h"
 #include "pdlfs-common/testharness.h"
 
 #include <sys/stat.h>
