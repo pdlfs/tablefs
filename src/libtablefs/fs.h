@@ -109,7 +109,8 @@ class Filesystem {
   // wrapper function over "Fetch" which reads data from db. Information is
   // first attempted at the cache before the more costly "Fetch" operation is
   // invoked. When "Fetch" is invoked, the result will be inserted into the
-  // cache allowing subsequent lookups to go faster.
+  // cache allowing subsequent lookups to go faster. Set c to NULL when caching
+  // is disabled and each lookup hits db.
   Status LookupWithCache(FilesystemLookupCache* const c, const User& who,
                          const Stat& parent_dir, const Slice& name, Stat* stat);
 
@@ -118,7 +119,7 @@ class Filesystem {
                    FilesystemDir** dir);
 
   // Retrieve information of a name under a given parent directory. If mode is
-  // specified, only names of a certain file type (e.g., S_IFDIR, S_IFREG) are
+  // specified, only names of a matching file type (e.g., S_IFDIR, S_IFREG) are
   // considered valid. Set mode to 0 to allow all file types.
   Status Fetch(const User& who, const Stat& parent_dir, const Slice& name,
                uint32_t mode, Stat* stat);
@@ -128,7 +129,12 @@ class Filesystem {
   Status CheckAndPut(const User& who, const Stat& parent_dir, const Slice& name,
                      uint32_t mode, Stat* stat);
 
-  // Max number of concurrent multi-op transactions.
+  // Max number of read or write transactions that may go simultaneously. This
+  // limit only applies to multi-op transactions. A multi-op transaction
+  // performs more than one db or cache accesses, read or write. Single-op
+  // transactions consisting of a single db access or a single cache access are
+  // not locked at the fs layer and are directly sent to the underlying db or
+  // the cache implementation for per-op processing and concurrency control.
   enum { kWay = 8 };  // Must be a power of 2
   port::Mutex mus_[kWay];
   FilesystemLookupCache* cache_;
