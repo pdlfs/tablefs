@@ -362,13 +362,13 @@ Status Filesystem::LookupWithCache(  ///
     key = LookupKey(tmp, DirId(parent_dir), name);
     hash = Hash0(key);
     // Mutex locking is only needed when cache is enabled so we must ensure that
-    // the group of cache lookup, db fetch, and cache insertion operations are
-    // done as a single atomic operation.
-    mu = &mu_sets_[hash & (kWay - 1)];
+    // the group of a cache lookup operation, a db fetch operation, and a cache
+    // insertion operation go as a single atomic operation.
+    mu = &mus_[hash & (kWay - 1)];
     mu->Lock();
     MutexLock cl(&c->mu_);
     h = c->lru_.Lookup(key, hash);
-    if (h) {  // Key is in cache; use it and release the handle.
+    if (h) {  // Key is in cache; use it!
       *stat = *h->value;
       c->lru_.Release(h);
     }
@@ -421,8 +421,8 @@ Status Filesystem::CheckAndPut(  ///
   if (!options_.skip_name_collision_checks) {
     key = LookupKey(tmp, pdir, name);
     hash = Hash0(key);
-    // Mutex locking is needed when we need to perform a write after read.
-    mu = &mu_sets_[hash & (kWay - 1)];
+    // Mutex locking is needed when we have to do a read before writing.
+    mu = &mus_[hash & (kWay - 1)];
     mu->Lock();
     status = db_->Get(pdir, name, stat, NULL);
     if (status.ok()) {
@@ -472,7 +472,7 @@ Status Filesystem::SeekToDir(  ///
     key = LookupKey(tmp, pdir, name);
     hash = Hash0(key);
     // Mutex locking is needed when we need to perform two db reads.
-    mu = &mu_sets_[hash & (kWay - 1)];
+    mu = &mus_[hash & (kWay - 1)];
     mu->Lock();
     status = db_->Get(pdir, name, &buf, NULL);
     if (!status.ok()) {

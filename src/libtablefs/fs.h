@@ -128,12 +128,9 @@ class Filesystem {
   Status CheckAndPut(const User& who, const Stat& parent_dir, const Slice& name,
                      uint32_t mode, Stat* stat);
 
-  // Max number of concurrent read-then-write operations. Assuming the
-  // underlying db uses an one-writer multiple-reader concurrency control
-  // mechanism, there is no point allowing a large number of concurrent
-  // read-then-writers at the filesystem layer. As such, we limit it at 8.
-  enum { kWay = 8 };
-  port::Mutex mu_sets_[kWay];
+  // Max number of concurrent multi-op transactions.
+  enum { kWay = 8 };  // Must be a power of 2
+  port::Mutex mus_[kWay];
   FilesystemLookupCache* cache_;
   port::Mutex rmu_;
   FilesystemRoot* r_;
