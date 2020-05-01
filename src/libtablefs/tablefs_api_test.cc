@@ -78,7 +78,7 @@ class FilesystemAPI {
   }
 
   void Creat(const char* path) {
-    int r = tablefs_mkreg(fs_, path, 0660);
+    int r = tablefs_mkfile(fs_, path, 0660);
     ASSERT_TRUE(r == 0);
   }
 
@@ -89,7 +89,7 @@ class FilesystemAPI {
 
   ~FilesystemAPI() {
     if (fs_) {
-      tablefs_delfshdl(fs_);
+      tablefs_closefs(fs_);
     }
   }
 

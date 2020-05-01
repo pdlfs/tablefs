@@ -134,9 +134,8 @@ Status Filesystem::Mkdir(  ///
   return status;
 }
 
-Status Filesystem::Mkreg(  ///
-    const User& who, const Stat* at, const char* const pathname,
-    uint32_t mode) {
+Status Filesystem::Creat(  ///
+    const User& who, const Stat* at, const char* pathname, uint32_t mode) {
   bool has_tailing_slashes(false);
   if (!at) at = &r_->rootstat;
   Stat parent_dir;

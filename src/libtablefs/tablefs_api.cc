@@ -168,7 +168,7 @@ int tablefs_openfs(tablefs_t* h, const char* fsloc) {
   }
 }
 
-int tablefs_delfshdl(tablefs_t* h) {
+int tablefs_closefs(tablefs_t* h) {
   if (h) {
     delete h->fsopts;
     delete h->fs;
@@ -177,14 +177,14 @@ int tablefs_delfshdl(tablefs_t* h) {
   return 0;
 }
 
-int tablefs_mkreg(tablefs_t* h, const char* path, uint32_t mode) {
+int tablefs_mkfile(tablefs_t* h, const char* path, uint32_t mode) {
   pdlfs::Status status;
   if (!h) {
     status = BadArgs();
   } else if (!path || path[0] != '/') {
     status = BadArgs();
   } else {
-    status = h->fs->Mkreg(h->me, NULL, path, mode);
+    status = h->fs->Creat(h->me, NULL, path, mode);
   }
 
   if (!status.ok()) {

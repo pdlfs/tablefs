@@ -48,11 +48,11 @@ int tablefs_set_readonly(tablefs_t* h, int flg);
 /* Open a filesystem image at a given location */
 int tablefs_openfs(tablefs_t* h, const char* fsloc);
 /* Close a filesystem image and delete its handle */
-int tablefs_delfshdl(tablefs_t* h);
+int tablefs_closefs(tablefs_t* h);
 /* Retrieve file status */
 int tablefs_lstat(tablefs_t* h, const char* path, struct stat* stat);
 /* Create a regular file at a specified path */
-int tablefs_mkreg(tablefs_t* h, const char* path, uint32_t mode);
+int tablefs_mkfile(tablefs_t* h, const char* path, uint32_t mode);
 /* Create a filesystem directory at a specified path */
 int tablefs_mkdir(tablefs_t* h, const char* path, uint32_t mode);
 struct tablefs_dir; /* Opaque handle to an opened filesystem directory */
