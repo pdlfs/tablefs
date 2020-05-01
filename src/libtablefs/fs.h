@@ -71,7 +71,6 @@ class Filesystem {
   ~Filesystem();
 
   // REQUIRES: OpenFilesystem has been called.
-
   Status Creat(const User& who, const Stat* at, const char* pathname,
                uint32_t mode);
   Status Mkdir(const User& who, const Stat* at, const char* pathname,
@@ -106,29 +105,37 @@ class Filesystem {
                 const char* pathname, Stat* parent_dir, Slice* last_component,
                 const char** remaining_path);
 
-  // Retrieve information with the help of an in-memory cache. This function is
-  // a wrapper function over "Lookup". Information is first attempted at a cache
-  // before the more costly "Lookup" is invoked. When "Lookup" is invoked, the
-  // result will be inserted into the cache reducing future lookup cost.
+  // Retrieve information with the help of an in-mem cache. This function is a
+  // wrapper function over "Fetch" which reads data from db. Information is
+  // first attempted at the cache before the more costly "Fetch" operation is
+  // invoked. When "Fetch" is invoked, the result will be inserted into the
+  // cache allowing subsequent lookups to go faster.
   Status LookupWithCache(FilesystemLookupCache* const c, const User& who,
-                         const Stat& parent_dir, const Slice& name,
-                         uint32_t mode, Stat* stat);
+                         const Stat& parent_dir, const Slice& name, Stat* stat);
+
+  // Initialize a directory handle for listing.
+  Status SeekToDir(const User& who, const Stat& parent_dir, const Slice& name,
+                   FilesystemDir** dir);
 
   // Retrieve information of a name under a given parent directory. If mode is
-  // specified, only names of a certain file type (e.g., S_IFDIR, S_IFREG)
-  // will be considered. Set mode to 0 to consider all file types.
-  Status Lookup(const User& who, const Stat& parent_dir, const Slice& name,
-                uint32_t mode, Stat* stat);
-  // Initialize a directory handle for directory listing.
-  Status Dirhdl(const User& who, const Stat& parent_dir, const Slice& name,
-                FilesystemDir** dir);
+  // specified, only names of a certain file type (e.g., S_IFDIR, S_IFREG) are
+  // considered valid. Set mode to 0 to allow all file types.
+  Status Fetch(const User& who, const Stat& parent_dir, const Slice& name,
+               uint32_t mode, Stat* stat);
 
-  // Insert a new filesystem node beneath a given parent directory.
-  // Return OK and the stat of the newly created filesystem node on success.
-  Status Put(const User& who, const Stat& parent_dir, const Slice& name,
-             uint32_t mode, Stat* stat);
+  // Insert a new node beneath a given parent directory. Check name conflicts
+  // and return OK and the stat of the newly created node on success.
+  Status CheckAndPut(const User& who, const Stat& parent_dir, const Slice& name,
+                     uint32_t mode, Stat* stat);
 
+  // Max number of concurrent read-then-write operations. Assuming the
+  // underlying db uses an one-writer multiple-reader concurrency control
+  // mechanism, there is no point allowing a large number of concurrent
+  // read-then-writers at the filesystem layer. As such, we limit it at 8.
+  enum { kWay = 8 };
+  port::Mutex mu_sets_[kWay];
   FilesystemLookupCache* cache_;
+  port::Mutex rmu_;
   FilesystemRoot* r_;
   // Root encoding of fs at the time fs was opened. This prevents us from
   // writing back root unnecessarily during fs closing.

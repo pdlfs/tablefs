@@ -51,18 +51,18 @@ struct FilesystemLookupCache {
 
 // Root information of a filesystem image.
 struct FilesystemRoot {
-  FilesystemRoot() {}  // Intentionally not initialized for performance.
+  FilesystemRoot() {}  // Intentionally not initialized for performance
   // Inode num for the next file or directory
-  uint64_t inoseq;
+  uint64_t inoseq_;
   // Stat of the root directory
-  Stat rootstat;
+  Stat rstat_;
 };
 
 Status Filesystem::Lstat(  ///
     const User& who, const Stat* at, const char* const pathname,
     Stat* const stat) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rootstat;
+  if (!at) at = &r_->rstat_;
   Stat parent_dir;
   Slice tgt;
   Status status =
@@ -74,9 +74,9 @@ Status Filesystem::Lstat(  ///
   if (!tgt.empty()) {
     const uint32_t mode =
         has_tailing_slashes ? S_IFDIR : 0;  // Target must be a dir
-    status = Lookup(who, parent_dir, tgt, mode, stat);
+    status = Fetch(who, parent_dir, tgt, mode, stat);
   } else {  // Special case in which path is a root
-    *stat = r_->rootstat;
+    *stat = r_->rstat_;
   }
 
   return status;
@@ -86,7 +86,7 @@ Status Filesystem::Opendir(  ///
     const User& who, const Stat* at, const char* const pathname,
     FilesystemDir** dir) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rootstat;
+  if (!at) at = &r_->rstat_;
   Stat parent_dir;
   Slice dirname;
   Status status =
@@ -95,7 +95,7 @@ Status Filesystem::Opendir(  ///
     return status;
   }
 
-  status = Dirhdl(who, parent_dir, dirname, dir);
+  status = SeekToDir(who, parent_dir, dirname, dir);
 
   return status;
 }
@@ -116,7 +116,7 @@ Status Filesystem::Mkdir(  ///
     const User& who, const Stat* at, const char* const pathname,
     uint32_t mode) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rootstat;
+  if (!at) at = &r_->rstat_;
   Stat parent_dir;
   Slice dirname;
   Status status =
@@ -129,7 +129,7 @@ Status Filesystem::Mkdir(  ///
 
   mode = S_IFDIR | (ALLPERMS & mode);
   Stat stat;
-  status = Put(who, parent_dir, dirname, mode, &stat);
+  status = CheckAndPut(who, parent_dir, dirname, mode, &stat);
 
   return status;
 }
@@ -137,7 +137,7 @@ Status Filesystem::Mkdir(  ///
 Status Filesystem::Creat(  ///
     const User& who, const Stat* at, const char* pathname, uint32_t mode) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rootstat;
+  if (!at) at = &r_->rstat_;
   Stat parent_dir;
   Slice fname;
   Status status =
@@ -152,7 +152,7 @@ Status Filesystem::Creat(  ///
 
   mode = S_IFREG | (ALLPERMS & mode);
   Stat stat;
-  status = Put(who, parent_dir, fname, mode, &stat);
+  status = CheckAndPut(who, parent_dir, fname, mode, &stat);
 
   return status;
 }
@@ -310,8 +310,7 @@ Status Filesystem::Resolv(  ///
     // If caching is enabled, result may be read (copied) from the cache instead
     // of the filesystem's DB instance. No cache handle or reference counting
     // stuff is exposed to us (the caller) keeping semantics simple
-    status = LookupWithCache(cache_, who, *current_parent, current_name,
-                             S_IFDIR, &tmp);
+    status = LookupWithCache(cache_, who, *current_parent, current_name, &tmp);
     if (status.ok()) {
       current_parent = &tmp;
     } else {
@@ -330,52 +329,70 @@ Status Filesystem::Resolv(  ///
 }
 
 namespace {
+inline Slice LookupKey(char* const dst, const DirId& parent_dir,
+                       const Slice& name) {
+  char* p = dst;
+  EncodeFixed64(p, parent_dir.ino);
+  p += 8;
+  EncodeFixed32(p, Hash(name.data(), name.size(), 0));
+  p += 4;
+  return Slice(dst, p - dst);
+}
+
+inline uint32_t Hash0(const Slice& key) {
+  return Hash(key.data(), key.size(), 0);
+}
+
 void DeleteStat(  /// Delete stat inside a cache entry
     const Slice& key, Stat* stat) {
   delete stat;
 }
 }  // namespace
 
-// This function is only called from pathname resolution.
-// So only directory information may be cached.
 Status Filesystem::LookupWithCache(  ///
     FilesystemLookupCache* const c, const User& who, const Stat& parent_dir,
-    const Slice& name, uint32_t mode, Stat* stat) {
+    const Slice& name, Stat* const stat) {
   FilesystemLookupCache::Handle* h = NULL;
   Status status;
-  std::string key;
-  uint32_t namehash;
+  char tmp[30];
+  port::Mutex* mu = NULL;
   uint32_t hash;
+  Slice key;
   if (c) {
-    key.reserve(16);
-    PutFixed64(&key, parent_dir.InodeNo());
-    namehash = Hash(name.data(), name.size(), 0);
-    PutFixed64(&key, namehash);
-    hash = Hash(key.data(), key.size(), 0);
-    MutexLock ml(&c->mu_);
+    key = LookupKey(tmp, DirId(parent_dir), name);
+    hash = Hash0(key);
+    // Mutex locking is only needed when cache is enabled so we must ensure that
+    // the group of cache lookup, db fetch, and cache insertion operations are
+    // done as a single atomic operation.
+    mu = &mu_sets_[hash & (kWay - 1)];
+    mu->Lock();
+    MutexLock cl(&c->mu_);
     h = c->lru_.Lookup(key, hash);
-    if (h) {  // Key is in cache; use it and release it.
+    if (h) {  // Key is in cache; use it and release the handle.
       *stat = *h->value;
       c->lru_.Release(h);
-      return status;
+    }
+  }
+  if (!h) {  // Either cache is disabled or key is not in cache
+    status = Fetch(who, parent_dir, name, S_IFDIR, stat);
+    if (c && status.ok()) {
+      // Cache result if it is a success.
+      MutexLock cl(&c->mu_);
+      h = c->lru_.Insert(key, hash, new Stat(*stat), 1, DeleteStat);
+      c->lru_.Release(h);
     }
   }
 
-  // Either cache is not enabled (NULL) or key is not in cache
-  status = Lookup(who, parent_dir, name, mode, stat);
-  if (c && status.ok()) {
-    // Cache result if it is a success
-    MutexLock ml(&c->mu_);
-    h = c->lru_.Insert(key, hash, new Stat(*stat), 1, DeleteStat);
-    c->lru_.Release(h);
+  if (mu) {
+    mu->Unlock();
   }
 
   return status;
 }
 
-Status Filesystem::Lookup(  ///
-    const User& who, const Stat& parent_dir, const Slice& name,
-    uint32_t const mode, Stat* const stat) {
+Status Filesystem::Fetch(  ///
+    const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
+    Stat* const stat) {
   if (!IsLookupOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
@@ -389,71 +406,106 @@ Status Filesystem::Lookup(  ///
   }
 }
 
-Status Filesystem::Put(  ///
+Status Filesystem::CheckAndPut(  ///
     const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
-    Stat* stat) {
+    Stat* const stat) {
   if (!IsDirWriteOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
-  Status status;
   const DirId pdir(parent_dir);
+  Status status;
+  char tmp[30];
+  port::Mutex* mu = NULL;
+  uint32_t hash;
+  Slice key;
   if (!options_.skip_name_collision_checks) {
+    key = LookupKey(tmp, pdir, name);
+    hash = Hash0(key);
+    // Mutex locking is needed when we need to perform a write after read.
+    mu = &mu_sets_[hash & (kWay - 1)];
+    mu->Lock();
     status = db_->Get(pdir, name, stat, NULL);
     if (status.ok()) {
-      return Status::AlreadyExists(Slice());
-    } else if (!status.IsNotFound()) {
-      return status;
+      status = Status::AlreadyExists(Slice());
+    } else if (status.IsNotFound()) {
+      status = Status::OK();
     }
   }
 
-  stat->SetInodeNo(r_->inoseq++);
-  stat->SetFileSize(0);
-  stat->SetFileMode(mode);
-  stat->SetUserId(who.uid);
-  stat->SetGroupId(who.gid);
-  stat->SetModifyTime(0);
-  stat->SetChangeTime(0);
-  stat->AssertAllSet();
+  if (status.ok()) {
+    rmu_.Lock();
+    stat->SetInodeNo(r_->inoseq_++);
+    rmu_.Unlock();
+    stat->SetFileSize(0);
+    stat->SetFileMode(mode);
+    stat->SetUserId(who.uid);
+    stat->SetGroupId(who.gid);
+    stat->SetModifyTime(0);
+    stat->SetChangeTime(0);
+    stat->AssertAllSet();
 
-  status = db_->Put(pdir, name, *stat, NULL);
+    status = db_->Put(pdir, name, *stat, NULL);
+  }
+
+  if (mu) {
+    mu->Unlock();
+  }
 
   return status;
 }
 
-Status Filesystem::Dirhdl(  ///
+Status Filesystem::SeekToDir(  ///
     const User& who, const Stat& parent_dir, const Slice& name,
-    FilesystemDir** dir) {
+    FilesystemDir** const dir) {
   if (!IsLookupOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
-  Stat tmp;
+  Stat buf;
   const DirId pdir(parent_dir);
-  const Stat* stat = &r_->rootstat;
+  const Stat* stat = &r_->rstat_;
   Status status;
-  if (!name.empty()) {  // No need to get if target is root
-    status = db_->Get(pdir, name, &tmp, NULL);
+  char tmp[30];
+  port::Mutex* mu = NULL;
+  uint32_t hash;
+  Slice key;
+  if (!name.empty()) {  // No need to check if name is root
+    key = LookupKey(tmp, pdir, name);
+    hash = Hash0(key);
+    // Mutex locking is needed when we need to perform two db reads.
+    mu = &mu_sets_[hash & (kWay - 1)];
+    mu->Lock();
+    status = db_->Get(pdir, name, &buf, NULL);
     if (!status.ok()) {
-      return status;
-    } else if (!S_ISDIR(tmp.FileMode())) {  // Must be a dir
-      return Status::DirExpected(Slice());
+      // Empty
+    } else if (!S_ISDIR(buf.FileMode())) {  // Must be a dir
+      status = Status::DirExpected(Slice());
+    } else {
+      stat = &buf;
     }
-    stat = &tmp;
   }
-  if (!IsDirReadOk(options_, *stat, who)) {
-    return Status::AccessDenied(Slice());
-  } else {
-    *dir = reinterpret_cast<FilesystemDir*>(db_->Opendir(DirId(*stat)));
-    return status;
+
+  if (status.ok()) {
+    if (IsDirReadOk(options_, *stat, who)) {
+      *dir = reinterpret_cast<FilesystemDir*>(db_->Opendir(DirId(*stat)));
+    } else {
+      status = Status::AccessDenied(Slice());
+    }
   }
+
+  if (mu) {
+    mu->Unlock();
+  }
+
+  return status;
 }
 
 namespace {
 // Recover information from a given encoding string.
 // Return True on success, False otherwise.
 bool DecodeFrom(FilesystemRoot* r, Slice* input) {
-  if (!r->rootstat.DecodeFrom(input))  ///
+  if (!r->rstat_.DecodeFrom(input))  ///
     return false;
-  return GetVarint64(input, &r->inoseq);
+  return GetVarint64(input, &r->inoseq_);
 }
 
 bool DecodeFrom(FilesystemRoot* r, const Slice& encoding) {
@@ -463,8 +515,8 @@ bool DecodeFrom(FilesystemRoot* r, const Slice& encoding) {
 
 // Encode root information into a buf space.
 Slice EncodeTo(FilesystemRoot* r, char* scratch) {
-  Slice en = r->rootstat.EncodeTo(scratch);
-  char* p = EncodeVarint64(scratch + en.size(), r->inoseq);
+  Slice en = r->rstat_.EncodeTo(scratch);
+  char* p = EncodeVarint64(scratch + en.size(), r->inoseq_);
   Slice rv(scratch, p - scratch);
   return rv;
 }
@@ -503,8 +555,8 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
     s = db_->LoadFsroot(&prev_r_);
     if (s.IsNotFound()) {  // This is a new fs image
       r_ = new FilesystemRoot;
-      FormatFilesystem(&r_->rootstat);
-      r_->inoseq = 2;
+      FormatFilesystem(&r_->rstat_);
+      r_->inoseq_ = 2;
       s = Status::OK();
     } else if (s.ok()) {
       r_ = new FilesystemRoot;
