@@ -31,57 +31,124 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "../fsdb.h"
 
-#include "port_kvrange.h"
+#include <kvrangedb/db.h>
+#include <kvrangedb/options.h>
+#include <kvrangedb/slice.h>
+#include <kvrangedb/status.h>
+#include <kvrangedb/write_batch.h>
 
 namespace pdlfs {
-
-MDBOptions::MDBOptions() : db(NULL) {}
-
+namespace port {
+// An MXDB instantiation that binds to KVRANGEDB. KVRANGEDB is a custom B-Tree
+// implementation supporting range queries atop KVSSD through storing a
+// secondary ordered key index in the KVSSD device. KVRANGEDB is a LANL research
+// project - https://github.com/celeryfake/kvrangedb
+typedef MXDB<::kvrangedb::DB, ::kvrangedb::Slice, ::kvrangedb::Status,
+             kNameInKey>
+    MDB;
+}  // namespace port
+struct FilesystemDb::Rep {
+  Rep();
+  port::MDB* mdb;
+  ::kvrangedb::DB* db;
+};
+namespace {
 struct ReadOptions2 : public ::kvrangedb::ReadOptions {
   ReadOptions2() : ReadOptions(), snapshot(NULL) {}
   void* snapshot;
 };
-
-struct MDB::Tx {
+::kvrangedb::Status OpenDb(  ///
+    const FilesystemOptions& options, const std::string& dbloc,
+    ::kvrangedb::DB** db) {
+  ::kvrangedb::Options dbopts;  // XXX: add kvrangedb specific configurations
+  return ::kvrangedb::DB::Open(dbopts, dbloc, db);
+}
+struct Tx {  // Db transaction. Not used, but required by the MXDB code.
+  const void* snap;
   ::kvrangedb::WriteBatch bat;
-  void* snap;
 };
+Tx* const NULLTX = NULL;
+}  // namespace
 
-MDB::MDB(const MDBOptions& options) : MXDB(options.db) {}
-
-MDB::~MDB() {}
-
-Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
-  ReadOptions2 ropts;
-  Tx* const tx = NULL;
-  return GET<Key>(id, fname, stat, NULL, &ropts, tx);
+Status FilesystemDb::Open(const std::string& dbloc) {
+  ::kvrangedb::Status status = OpenDb(options_, dbloc, &rep_->db);
+  if (!status.ok()) {
+    return Status::IOError(status.ToString());
+  }
+  rep_->mdb = new port::MDB(rep_->db);
+  return Status::OK();
 }
 
-Status MDB::Set(const DirId& id, const Slice& fname, const Stat& stat) {
-  ::kvrangedb::WriteOptions wopts;
-  Tx* const tx = NULL;
-  return SET<Key>(id, fname, stat, fname, &wopts, tx);
+Status FilesystemDb::SaveFsroot(const Slice& root_encoding) {
+  ::kvrangedb::Status status = rep_->db->Put(
+      ::kvrangedb::WriteOptions(), "/",
+      ::kvrangedb::Slice(root_encoding.data(), root_encoding.size()));
+  if (!status.ok()) {
+    return Status::IOError(status.ToString());
+  } else {
+    return Status::OK();
+  }
 }
 
-Status MDB::Delete(const DirId& id, const Slice& fname) {
-  ::kvrangedb::WriteOptions wopts;
-  Tx* const tx = NULL;
-  return DELETE<Key>(id, fname, &wopts, tx);
+Status FilesystemDb::LoadFsroot(std::string* tmp) {
+  ::kvrangedb::Status status = rep_->db->Get(ReadOptions2(), "/", tmp);
+  if (status.IsNotFound()) {
+    return Status::NotFound(Slice());
+  } else if (!status.ok()) {
+    return Status::IOError(status.ToString());
+  } else {
+    return Status::OK();
+  }
 }
 
-MDB::Dir* MDB::Opendir(const DirId& id) {
-  ReadOptions2 ropts;
-  Tx* const tx = NULL;
-  return OPENDIR<::kvrangedb::Iterator, Key>(id, &ropts, tx);
+Status FilesystemDb::Flush() { return Status::OK(); }
+
+Status FilesystemDb::Get(const DirId& id, const Slice& fname, Stat* stat,
+                         FilesystemDbStats* stats) {
+  ReadOptions2 myreadopts;
+  return rep_->mdb->GET<Key>(id, fname, stat, NULL, &myreadopts, NULLTX, stats);
 }
 
-Status MDB::Readdir(Dir* dir, Stat* stat, std::string* name) {
-  return READDIR<::kvrangedb::Iterator>(dir, stat, name);
+Status FilesystemDb::Put(const DirId& id, const Slice& fname, const Stat& stat,
+                         FilesystemDbStats* stats) {
+  ::kvrangedb::WriteOptions mywriteopts;
+  return rep_->mdb->PUT<Key>(id, fname, stat, fname, &mywriteopts, NULLTX,
+                             stats);
 }
 
-void MDB::Closedir(MDB::Dir* dir) {
-  return CLOSEDIR(dir);  // This also deletes dir
+Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
+  ::kvrangedb::WriteOptions myopts;
+  return rep_->mdb->DELETE<Key>(id, fname, &myopts, NULLTX);
+}
+
+FilesystemDb::Dir* FilesystemDb::Opendir(const DirId& dir_id) {
+  ReadOptions2 myreadopts;
+  return reinterpret_cast<Dir*>(rep_->mdb->OPENDIR<::kvrangedb::Iterator, Key>(
+      dir_id, &myreadopts, NULLTX));
+}
+
+Status FilesystemDb::Readdir(Dir* dir, Stat* stat, std::string* name) {
+  return rep_->mdb->READDIR<::kvrangedb::Iterator>(
+      reinterpret_cast<port::MDB::Dir<::kvrangedb::Iterator>*>(dir), stat,
+      name);
+}
+
+void FilesystemDb::Closedir(Dir* dir) {
+  return rep_->mdb->CLOSEDIR(
+      reinterpret_cast<port::MDB::Dir<::kvrangedb::Iterator>*>(dir));
+}
+
+FilesystemDb::FilesystemDb(const FilesystemOptions& options)
+    : options_(options), rep_(new Rep()) {}
+
+FilesystemDb::Rep::Rep() : mdb(NULL), db(NULL) {}
+
+FilesystemDb::~FilesystemDb() {
+  delete rep_->mdb;
+  delete rep_->db;
+  delete rep_;
 }
 
 }  // namespace pdlfs
