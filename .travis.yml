@@ -61,7 +61,7 @@ script:
           -DTABLEFS_COMMON_INTREE=ON \
           -DTABLEFS_PORT_KVRANGE=OFF \
           -DTABLEFS_PORT_LEVELDB=OFF \
-          .
+          ..
   - make
   - ctest -VV --output-on-failure
   - date
