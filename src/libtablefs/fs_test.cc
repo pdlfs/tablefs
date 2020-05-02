@@ -155,16 +155,21 @@ TEST(FilesystemTest, Subdirs) {
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Mkdir("/1/a"));
+  ASSERT_OK(Creat("/1/b"));
   ASSERT_CONFLICT(Mkdir("/1/a"));
   ASSERT_CONFLICT(Creat("/1/a"));
+  ASSERT_CONFLICT(Mkdir("/1/b"));
+  ASSERT_CONFLICT(Creat("/1/b"));
   ASSERT_OK(Exist("/1/a"));
   ASSERT_OK(Exist("/1/a/"));
   ASSERT_OK(Exist("//1//a"));
   ASSERT_OK(Exist("//1//a//"));
   ASSERT_OK(Exist("///1///a"));
   ASSERT_OK(Exist("///1///a///"));
-  ASSERT_NOTFOUND(Exist("/1/b"));
-  ASSERT_OK(Mkdir("/1/b"));
+  ASSERT_ERR(Mkdir("/1/b/x"));
+  ASSERT_ERR(Creat("/1/b/y"));
+  ASSERT_NOTFOUND(Exist("/1/c"));
+  ASSERT_OK(Mkdir("/1/c"));
 }
 
 TEST(FilesystemTest, Resolv) {
