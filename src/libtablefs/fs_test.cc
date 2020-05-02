@@ -45,12 +45,17 @@ namespace pdlfs {
 
 class FilesystemTest {
  public:
-  FilesystemTest() {
+  FilesystemTest() : fs_(NULL) {
     fsloc_ = test::TmpDir() + "/filesystem_test";
     DestroyDb(fsloc_);
-    fs_ = new Filesystem(options_);
     me.uid = 1;
     me.gid = 1;
+  }
+
+  Status OpenFilesystem() {
+    delete fs_;
+    fs_ = new Filesystem(options_);
+    return fs_->OpenFilesystem(fsloc_);
   }
 
   void Listdir(FilesystemDir* dir, std::set<std::string>* set) {
@@ -89,16 +94,14 @@ class FilesystemTest {
   Filesystem* fs_;
 };
 
-TEST(FilesystemTest, OpenAndClose) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+TEST(FilesystemTest, OpenAndReopen) {
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Exist("/"));
   ASSERT_OK(Exist("//"));
   ASSERT_OK(Exist("///"));
   ASSERT_OK(Creat("/1"));
   ASSERT_EQ(fs_->TEST_GetCurrentInoseq(), 2);
-  delete fs_;
-  fs_ = new Filesystem(options_);
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_EQ(fs_->TEST_GetCurrentInoseq(), 2);
   ASSERT_OK(Exist("/"));
   ASSERT_OK(Exist("//"));
@@ -107,8 +110,7 @@ TEST(FilesystemTest, OpenAndClose) {
 }
 
 TEST(FilesystemTest, Files) {
-  Stat tmp;
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Creat("/1"));
   ASSERT_CONFLICT(Creat("/1"));
   ASSERT_OK(Exist("/1"));
@@ -120,8 +122,15 @@ TEST(FilesystemTest, Files) {
   ASSERT_OK(Creat("/2"));
 }
 
+TEST(FilesystemTest, Files_NoDupChecks) {
+  options_.skip_name_collision_checks = true;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat("/1"));
+  ASSERT_OK(Creat("/1"));
+}
+
 TEST(FilesystemTest, Dirs) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_CONFLICT(Mkdir("/1"));
   ASSERT_CONFLICT(Creat("/1"));
@@ -135,8 +144,15 @@ TEST(FilesystemTest, Dirs) {
   ASSERT_OK(Mkdir("/2"));
 }
 
+TEST(FilesystemTest, Dirs_NoDupChecks) {
+  options_.skip_name_collision_checks = true;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1"));
+}
+
 TEST(FilesystemTest, Subdirs) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Mkdir("/1/a"));
   ASSERT_CONFLICT(Mkdir("/1/a"));
@@ -152,7 +168,7 @@ TEST(FilesystemTest, Subdirs) {
 }
 
 TEST(FilesystemTest, Resolv) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Mkdir("/1/2"));
   ASSERT_OK(Mkdir("/1/2/3"));
@@ -172,7 +188,7 @@ TEST(FilesystemTest, Resolv) {
 }
 
 TEST(FilesystemTest, Listdir1) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Creat("/1"));
   ASSERT_OK(Mkdir("/2"));
   ASSERT_OK(Creat("/3"));
@@ -191,7 +207,7 @@ TEST(FilesystemTest, Listdir1) {
 }
 
 TEST(FilesystemTest, Listdir2) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Creat("/1/a"));
   ASSERT_OK(Mkdir("/1/b"));
