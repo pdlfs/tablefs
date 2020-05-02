@@ -32,14 +32,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fs.h"
+
 #include "fsdb.h"
 #include "port.h"
 
 #include "pdlfs-common/testharness.h"
 
-#include <sys/stat.h>
 #include <set>
 #include <string>
+#include <sys/stat.h>
 
 namespace pdlfs {
 

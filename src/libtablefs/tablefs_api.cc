@@ -31,10 +31,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "tablefs/tablefs_api.h"
+
 #include "fs.h"
 
 #include "pdlfs-common/pdlfs_platform.h"
-#include "tablefs/tablefs_api.h"
 
 #include <errno.h>
 #ifndef ENOSYS
