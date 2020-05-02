@@ -172,6 +172,25 @@ TEST(FilesystemTest, Subdirs) {
   ASSERT_OK(Mkdir("/1/c"));
 }
 
+TEST(FilesystemTest, Subdirs_AccessDenied) {
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/a"));
+  me.uid = me.gid = 2;
+  ASSERT_ERR(Mkdir("/1/a/x"));
+  ASSERT_ERR(Creat("/1/a/y"));
+}
+
+TEST(FilesystemTest, Subdirs_NoPermChecks) {
+  options_.skip_perm_checks = true;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/a"));
+  me.uid = me.gid = 2;
+  ASSERT_OK(Mkdir("/1/a/x"));
+  ASSERT_OK(Creat("/1/a/y"));
+}
+
 TEST(FilesystemTest, Resolv) {
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
