@@ -498,6 +498,11 @@ Status Filesystem::SeekToDir(  ///
   return status;
 }
 
+uint64_t Filesystem::TEST_GetCurrentInoseq() {
+  MutexLock ml(&rmu_);
+  return r_->inoseq_;
+}
+
 namespace {
 // Recover information from a given encoding string.
 // Return True on success, False otherwise.
@@ -555,7 +560,7 @@ Status Filesystem::OpenFilesystem(const std::string& fsloc) {
     if (s.IsNotFound()) {  // This is a new fs image
       r_ = new FilesystemRoot;
       FormatFilesystem(&r_->rstat_);
-      r_->inoseq_ = 2;
+      r_->inoseq_ = 1;
       s = Status::OK();
     } else if (s.ok()) {
       r_ = new FilesystemRoot;

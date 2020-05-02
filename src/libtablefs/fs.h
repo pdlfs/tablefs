@@ -84,6 +84,8 @@ class Filesystem {
   Status Readdir(FilesystemDir* dir, Stat* stat, std::string* name);
   Status Closdir(FilesystemDir* dir);
 
+  uint64_t TEST_GetCurrentInoseq();
+
  private:
   // Resolve a filesystem path down to the last component of the path. Return
   // the name of the last component and information of its parent directory on

@@ -35,7 +35,6 @@
 #include "fsdb.h"
 #include "port.h"
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/testharness.h"
 
 #include <sys/stat.h>
@@ -90,17 +89,21 @@ class FilesystemTest {
   Filesystem* fs_;
 };
 
-TEST(FilesystemTest, OpenFs) {
+TEST(FilesystemTest, OpenAndClose) {
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
   ASSERT_OK(Exist("/"));
   ASSERT_OK(Exist("//"));
   ASSERT_OK(Exist("///"));
+  ASSERT_OK(Creat("/1"));
+  ASSERT_EQ(fs_->TEST_GetCurrentInoseq(), 2);
   delete fs_;
   fs_ = new Filesystem(options_);
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_EQ(fs_->TEST_GetCurrentInoseq(), 2);
   ASSERT_OK(Exist("/"));
   ASSERT_OK(Exist("//"));
   ASSERT_OK(Exist("///"));
+  ASSERT_OK(Exist("/1"));
 }
 
 TEST(FilesystemTest, Files) {
@@ -342,6 +345,7 @@ class FilesystemLister {
 
 }  // namespace pdlfs
 
+#include "pdlfs-common/pdlfs_config.h"
 #if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
 #endif
