@@ -41,6 +41,7 @@
 
 namespace pdlfs {
 
+struct FilesystemDbStats;
 struct FilesystemLookupCache;
 struct FilesystemRoot;
 
@@ -71,15 +72,15 @@ class Filesystem {
   ~Filesystem();
 
   // REQUIRES: OpenFilesystem has been called.
-  Status Creat(const User& who, const Stat* at, const char* pathname,
-               uint32_t mode);
-  Status Mkdir(const User& who, const Stat* at, const char* pathname,
-               uint32_t mode);
-  Status Lstat(const User& who, const Stat* at, const char* pathname,
-               Stat* stat);
+  Status Creat(const User& who, const char* pathname, uint32_t mode,
+               FilesystemDbStats* stats);
+  Status Mkdir(const User& who, const char* pathname, uint32_t mode,
+               FilesystemDbStats* stats);
+  Status Lstat(const User& who, const char* pathname, Stat* stat,
+               FilesystemDbStats* stats);
 
-  Status Opendir(const User& who, const Stat* at, const char* pathname,
-                 FilesystemDir**);
+  Status Opendir(const User& who, const char* pathname, FilesystemDir** dir,
+                 FilesystemDbStats* stats);
   Status Readdir(FilesystemDir* dir, Stat* stat, std::string* name);
   Status Closdir(FilesystemDir* dir);
 
@@ -93,7 +94,7 @@ class Filesystem {
   // while the name of the last component of the path is set to empty.
   Status Resolu(const User& who, const Stat& at, const char* pathname,
                 Stat* parent_dir, Slice* last_component,
-                bool* has_tailing_slashes);
+                bool* has_tailing_slashes, FilesystemDbStats* stats);
 
   // Resolve a filesystem path down to the last component of the path. Return
   // the name of the last component and information of its parent directory on
@@ -103,7 +104,7 @@ class Filesystem {
   // erroneous directory.
   Status Resolv(const User& who, const Stat& relative_root,
                 const char* pathname, Stat* parent_dir, Slice* last_component,
-                const char** remaining_path);
+                const char** remaining_path, FilesystemDbStats* stats);
 
   // Retrieve information with the help of an in-mem cache. This function is a
   // wrapper function over "Fetch" which reads data from db. Information is
@@ -112,22 +113,23 @@ class Filesystem {
   // cache allowing subsequent lookups to go faster. Set c to NULL when caching
   // is disabled and each lookup hits db.
   Status LookupWithCache(FilesystemLookupCache* const c, const User& who,
-                         const Stat& parent_dir, const Slice& name, Stat* stat);
+                         const Stat& parent_dir, const Slice& name, Stat* stat,
+                         FilesystemDbStats* stats);
 
   // Initialize a directory handle for listing.
   Status SeekToDir(const User& who, const Stat& parent_dir, const Slice& name,
-                   FilesystemDir** dir);
+                   FilesystemDir** dir, FilesystemDbStats* stats);
 
   // Retrieve information of a name under a given parent directory. If mode is
   // specified, only names of a matching file type (e.g., S_IFDIR, S_IFREG) are
   // considered valid. Set mode to 0 to allow all file types.
   Status Fetch(const User& who, const Stat& parent_dir, const Slice& name,
-               uint32_t mode, Stat* stat);
+               uint32_t mode, Stat* stat, FilesystemDbStats* stats);
 
   // Insert a new node beneath a given parent directory. Check name conflicts
   // and return OK and the stat of the newly created node on success.
-  Status CheckAndPut(const User& who, const Stat& parent_dir, const Slice& name,
-                     uint32_t mode, Stat* stat);
+  Status Put(const User& who, const Stat& parent_dir, const Slice& name,
+             uint32_t mode, Stat* stat, FilesystemDbStats* stats);
 
   // Max number of read or write transactions that may go simultaneously. This
   // limit only applies to multi-op transactions. A multi-op transaction

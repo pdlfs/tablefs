@@ -32,6 +32,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fs.h"
+#include "fsdb.h"
 #include "port.h"
 
 #include "pdlfs-common/pdlfs_config.h"
@@ -67,18 +68,14 @@ class FilesystemTest {
     }
   }
 
-  Status Exist(const char* path, const Stat* at = NULL) {
+  Status Exist(const char* path) {
     Stat ignored;
-    return fs_->Lstat(me, at, path, &ignored);
+    return fs_->Lstat(me, path, &ignored, &stats_);
   }
 
-  Status Creat(const char* path, const Stat* at = NULL) {
-    return fs_->Creat(me, at, path, 0660);
-  }
+  Status Creat(const char* path) { return fs_->Creat(me, path, 0660, &stats_); }
 
-  Status Mkdir(const char* path, const Stat* at = NULL) {
-    return fs_->Mkdir(me, at, path, 0770);
-  }
+  Status Mkdir(const char* path) { return fs_->Mkdir(me, path, 0770, &stats_); }
 
   ~FilesystemTest() {
     if (fs_) {
@@ -88,6 +85,7 @@ class FilesystemTest {
 
   User me;
   std::string fsloc_;
+  FilesystemDbStats stats_;
   FilesystemOptions options_;
   Filesystem* fs_;
 };
@@ -178,7 +176,7 @@ TEST(FilesystemTest, Listdir1) {
   ASSERT_OK(Mkdir("/4"));
   ASSERT_OK(Creat("/5"));
   FilesystemDir* dir;
-  ASSERT_OK(fs_->Opendir(me, NULL, "/", &dir));
+  ASSERT_OK(fs_->Opendir(me, "/", &dir, NULL));
   std::set<std::string> set;
   Listdir(dir, &set);
   ASSERT_TRUE(set.count("1") == 1);
@@ -198,7 +196,7 @@ TEST(FilesystemTest, Listdir2) {
   ASSERT_OK(Mkdir("/1/d"));
   ASSERT_OK(Creat("/1/e"));
   FilesystemDir* dir;
-  ASSERT_OK(fs_->Opendir(me, NULL, "/1", &dir));
+  ASSERT_OK(fs_->Opendir(me, "/1", &dir, NULL));
   std::set<std::string> set;
   Listdir(dir, &set);
   ASSERT_TRUE(set.count("a") == 1);
@@ -255,14 +253,14 @@ class FilesystemLoader {
     if (depth == tree_depth_) {  // This is the leaf level of directories
       for (int i = 0; i < files_per_leaddir_; i++) {
         path->push_back('a' + i);
-        ASSERT_OK(fs->Creat(me_, NULL, path->c_str(), 0644));
+        ASSERT_OK(fs->Creat(me_, path->c_str(), 0644, NULL));
         fprintf(stderr, "%s\n", path->c_str());
         path->resize(prefix_len);
       }
     } else {
       for (int i = 0; i < f_; i++) {
         path->push_back('A' + i);
-        ASSERT_OK(fs->Mkdir(me_, NULL, path->c_str(), 0755));
+        ASSERT_OK(fs->Mkdir(me_, path->c_str(), 0755, NULL));
         fprintf(stderr, "%s\n", path->c_str());
         path->push_back('/');  // Add path delimiter
         Doit(fs, path, depth + 1);
@@ -304,7 +302,7 @@ class FilesystemLister {
   void Doit(Filesystem* fs, std::string* path) {
     FilesystemDir* dir;
     const size_t prefix_len = path->size();
-    ASSERT_OK(fs->Opendir(me_, NULL, path->c_str(), &dir));
+    ASSERT_OK(fs->Opendir(me_, path->c_str(), &dir, NULL));
     std::string name;
     Stat stat;
     for (;;) {

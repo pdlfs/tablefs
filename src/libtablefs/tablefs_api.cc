@@ -184,7 +184,7 @@ int tablefs_mkfile(tablefs_t* h, const char* path, uint32_t mode) {
   } else if (!path || path[0] != '/') {
     status = BadArgs();
   } else {
-    status = h->fs->Creat(h->me, NULL, path, mode);
+    status = h->fs->Creat(h->me, path, mode, NULL);
   }
 
   if (!status.ok()) {
@@ -201,7 +201,7 @@ int tablefs_mkdir(tablefs_t* h, const char* path, uint32_t mode) {
   } else if (!path || path[0] != '/') {
     status = BadArgs();
   } else {
-    status = h->fs->Mkdir(h->me, NULL, path, mode);
+    status = h->fs->Mkdir(h->me, path, mode, NULL);
   }
 
   if (!status.ok()) {
@@ -221,7 +221,7 @@ int tablefs_lstat(tablefs_t* h, const char* path, struct stat* const buf) {
   } else if (!buf) {
     status = BadArgs();
   } else {
-    status = h->fs->Lstat(h->me, NULL, path, &stat);
+    status = h->fs->Lstat(h->me, path, &stat, NULL);
     if (status.ok()) {  /// XXX: currently no atimes are maintained
 #ifdef PDLFS_OS_MACOSX
       SetTimespec(&buf->st_atimespec, stat.ModifyTime());
@@ -256,7 +256,7 @@ tablefs_dir_t* tablefs_opendir(tablefs_t* h, const char* path) {
   } else if (!path || path[0] != '/') {
     status = BadArgs();
   } else {
-    status = h->fs->Opendir(h->me, NULL, path, &dir);
+    status = h->fs->Opendir(h->me, path, &dir, NULL);
   }
 
   if (!status.ok()) {

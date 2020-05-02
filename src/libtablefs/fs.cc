@@ -59,14 +59,13 @@ struct FilesystemRoot {
 };
 
 Status Filesystem::Lstat(  ///
-    const User& who, const Stat* at, const char* const pathname,
-    Stat* const stat) {
+    const User& who, const char* const pathname, Stat* const stat,
+    FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rstat_;
   Stat parent_dir;
   Slice tgt;
-  Status status =
-      Resolu(who, *at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  Status status = Resolu(who, r_->rstat_, pathname, &parent_dir, &tgt,
+                         &has_tailing_slashes, stats);
   if (!status.ok()) {
     return status;
   }
@@ -74,7 +73,7 @@ Status Filesystem::Lstat(  ///
   if (!tgt.empty()) {
     const uint32_t mode =
         has_tailing_slashes ? S_IFDIR : 0;  // Target must be a dir
-    status = Fetch(who, parent_dir, tgt, mode, stat);
+    status = Fetch(who, parent_dir, tgt, mode, stat, stats);
   } else {  // Special case in which path is a root
     *stat = r_->rstat_;
   }
@@ -83,19 +82,18 @@ Status Filesystem::Lstat(  ///
 }
 
 Status Filesystem::Opendir(  ///
-    const User& who, const Stat* at, const char* const pathname,
-    FilesystemDir** dir) {
+    const User& who, const char* const pathname, FilesystemDir** const dir,
+    FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rstat_;
   Stat parent_dir;
-  Slice dirname;
-  Status status =
-      Resolu(who, *at, pathname, &parent_dir, &dirname, &has_tailing_slashes);
+  Slice tgt;
+  Status status = Resolu(who, r_->rstat_, pathname, &parent_dir, &tgt,
+                         &has_tailing_slashes, stats);
   if (!status.ok()) {
     return status;
   }
 
-  status = SeekToDir(who, parent_dir, dirname, dir);
+  status = SeekToDir(who, parent_dir, tgt, dir, stats);
 
   return status;
 }
@@ -113,38 +111,37 @@ Status Filesystem::Closdir(FilesystemDir* dir) {
 }
 
 Status Filesystem::Mkdir(  ///
-    const User& who, const Stat* at, const char* const pathname,
-    uint32_t mode) {
+    const User& who, const char* const pathname, uint32_t mode,
+    FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rstat_;
   Stat parent_dir;
-  Slice dirname;
-  Status status =
-      Resolu(who, *at, pathname, &parent_dir, &dirname, &has_tailing_slashes);
+  Slice tgt;
+  Status status = Resolu(who, r_->rstat_, pathname, &parent_dir, &tgt,
+                         &has_tailing_slashes, stats);
   if (!status.ok()) {
     return status;
-  } else if (dirname.empty()) {  // Special case in which path is a root
+  } else if (tgt.empty()) {  // Special case in which path is a root
     return Status::AlreadyExists(Slice());
   }
 
   mode = S_IFDIR | (ALLPERMS & mode);
   Stat stat;
-  status = CheckAndPut(who, parent_dir, dirname, mode, &stat);
+  status = Put(who, parent_dir, tgt, mode, &stat, stats);
 
   return status;
 }
 
 Status Filesystem::Creat(  ///
-    const User& who, const Stat* at, const char* pathname, uint32_t mode) {
+    const User& who, const char* pathname, uint32_t mode,
+    FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
-  if (!at) at = &r_->rstat_;
   Stat parent_dir;
-  Slice fname;
-  Status status =
-      Resolu(who, *at, pathname, &parent_dir, &fname, &has_tailing_slashes);
+  Slice tgt;
+  Status status = Resolu(who, r_->rstat_, pathname, &parent_dir, &tgt,
+                         &has_tailing_slashes, stats);
   if (!status.ok()) {
     return status;
-  } else if (fname.empty()) {  // Special case in which path is a root
+  } else if (tgt.empty()) {  // Special case in which path is a root
     return Status::AlreadyExists(Slice());
   } else if (has_tailing_slashes) {  // Path is a dir
     return Status::FileExpected(Slice());
@@ -152,7 +149,7 @@ Status Filesystem::Creat(  ///
 
   mode = S_IFREG | (ALLPERMS & mode);
   Stat stat;
-  status = CheckAndPut(who, parent_dir, fname, mode, &stat);
+  status = Put(who, parent_dir, tgt, mode, &stat, stats);
 
   return status;
 }
@@ -160,12 +157,12 @@ Status Filesystem::Creat(  ///
 Status Filesystem::Resolu(  ///
     const User& who, const Stat& at, const char* const pathname,
     Stat* parent_dir, Slice* last_component,  ///
-    bool* has_tailing_slashes) {
+    bool* has_tailing_slashes, FilesystemDbStats* stats) {
 #define PATH_SGMT(pathname, remaining_path) \
   Slice(pathname, remaining_path - pathname)
   const char* remaining_path(NULL);
-  Status status =
-      Resolv(who, at, pathname, parent_dir, last_component, &remaining_path);
+  Status status = Resolv(who, at, pathname, parent_dir, last_component,
+                         &remaining_path, stats);
   if (status.IsDirExpected() && remaining_path) {
     return Status::DirExpected(PATH_SGMT(pathname, remaining_path));
   } else if (status.IsNotFound() && remaining_path) {
@@ -258,8 +255,9 @@ bool IsLookupOk(const FilesystemOptions& options, const Stat& dir,
 
 Status Filesystem::Resolv(  ///
     const User& who, const Stat& relative_root, const char* const pathname,
-    Stat* parent_dir, Slice* last_component,  ///
-    const char** remaining_path) {
+    Stat* const parent_dir, Slice* const last_component,
+    const char** const remaining_path,  ///
+    FilesystemDbStats* const stats) {
   assert(pathname);
   const char* p = pathname;
   const char* q;
@@ -310,7 +308,8 @@ Status Filesystem::Resolv(  ///
     // If caching is enabled, result may be read (copied) from the cache instead
     // of the filesystem's DB instance. No cache handle or reference counting
     // stuff is exposed to us (the caller) keeping semantics simple
-    status = LookupWithCache(cache_, who, *current_parent, current_name, &tmp);
+    status = LookupWithCache(cache_, who, *current_parent, current_name, &tmp,
+                             stats);
     if (status.ok()) {
       current_parent = &tmp;
     } else {
@@ -351,7 +350,7 @@ void DeleteStat(  /// Delete stat inside a cache entry
 
 Status Filesystem::LookupWithCache(  ///
     FilesystemLookupCache* const c, const User& who, const Stat& parent_dir,
-    const Slice& name, Stat* const stat) {
+    const Slice& name, Stat* const stat, FilesystemDbStats* const stats) {
   FilesystemLookupCache::Handle* h = NULL;
   Status status;
   char tmp[30];
@@ -374,7 +373,7 @@ Status Filesystem::LookupWithCache(  ///
     }
   }
   if (!h) {  // Either cache is disabled or key is not in cache
-    status = Fetch(who, parent_dir, name, S_IFDIR, stat);
+    status = Fetch(who, parent_dir, name, S_IFDIR, stat, stats);
     if (c && status.ok()) {
       // Cache result if it is a success.
       MutexLock cl(&c->mu_);
@@ -392,11 +391,11 @@ Status Filesystem::LookupWithCache(  ///
 
 Status Filesystem::Fetch(  ///
     const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
-    Stat* const stat) {
+    Stat* const stat, FilesystemDbStats* const stats) {
   if (!IsLookupOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
-  Status status = db_->Get(DirId(parent_dir), name, stat, NULL);
+  Status status = db_->Get(DirId(parent_dir), name, stat, stats);
   if (!status.ok()) {
     return status;
   } else if ((stat->FileMode() & mode) != mode) {
@@ -406,9 +405,9 @@ Status Filesystem::Fetch(  ///
   }
 }
 
-Status Filesystem::CheckAndPut(  ///
+Status Filesystem::Put(  ///
     const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
-    Stat* const stat) {
+    Stat* const stat, FilesystemDbStats* const stats) {
   if (!IsDirWriteOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
@@ -424,7 +423,7 @@ Status Filesystem::CheckAndPut(  ///
     // Mutex locking is needed when we have to do a read before writing.
     mu = &mus_[hash & (kWay - 1)];
     mu->Lock();
-    status = db_->Get(pdir, name, stat, NULL);
+    status = db_->Get(pdir, name, stat, stats);
     if (status.ok()) {
       status = Status::AlreadyExists(Slice());
     } else if (status.IsNotFound()) {
@@ -444,7 +443,7 @@ Status Filesystem::CheckAndPut(  ///
     stat->SetChangeTime(0);
     stat->AssertAllSet();
 
-    status = db_->Put(pdir, name, *stat, NULL);
+    status = db_->Put(pdir, name, *stat, stats);
   }
 
   if (mu) {
@@ -456,7 +455,7 @@ Status Filesystem::CheckAndPut(  ///
 
 Status Filesystem::SeekToDir(  ///
     const User& who, const Stat& parent_dir, const Slice& name,
-    FilesystemDir** const dir) {
+    FilesystemDir** const dir, FilesystemDbStats* const stats) {
   if (!IsLookupOk(options_, parent_dir, who)) {
     return Status::AccessDenied(Slice());
   }
@@ -474,7 +473,7 @@ Status Filesystem::SeekToDir(  ///
     // Mutex locking is needed when we need to perform two db reads.
     mu = &mus_[hash & (kWay - 1)];
     mu->Lock();
-    status = db_->Get(pdir, name, &buf, NULL);
+    status = db_->Get(pdir, name, &buf, stats);
     if (!status.ok()) {
       // Empty
     } else if (!S_ISDIR(buf.FileMode())) {  // Must be a dir
