@@ -211,6 +211,42 @@ TEST(FilesystemTest, Resolv) {
   ASSERT_ERR(Creat("/1/2/3/4/5/6/7"));
 }
 
+TEST(FilesystemTest, Resolv_NoCache) {
+  options_.size_lookup_cache = 0;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/2"));
+  ASSERT_OK(Mkdir("/1/2/3"));
+  ASSERT_OK(Mkdir("/1/2/3/4"));
+  ASSERT_OK(Mkdir("/1/2/3/4/5"));
+  ASSERT_OK(Creat("/1/2/3/4/5/6"));
+  ASSERT_OK(OpenFilesystem());
+  stats_ = FilesystemDbStats();
+  ASSERT_OK(Exist("/1/2/3/4/5/6"));
+  ASSERT_EQ(stats_.gets, 6);
+  stats_ = FilesystemDbStats();
+  ASSERT_OK(Exist("/1/2/3/4/5/6"));
+  ASSERT_EQ(stats_.gets, 6);
+}
+
+TEST(FilesystemTest, Resolv_WithCache) {
+  options_.size_lookup_cache = 128;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/2"));
+  ASSERT_OK(Mkdir("/1/2/3"));
+  ASSERT_OK(Mkdir("/1/2/3/4"));
+  ASSERT_OK(Mkdir("/1/2/3/4/5"));
+  ASSERT_OK(Creat("/1/2/3/4/5/6"));
+  ASSERT_OK(OpenFilesystem());
+  stats_ = FilesystemDbStats();
+  ASSERT_OK(Exist("/1/2/3/4/5/6"));
+  ASSERT_EQ(stats_.gets, 6);
+  stats_ = FilesystemDbStats();
+  ASSERT_OK(Exist("/1/2/3/4/5/6"));
+  ASSERT_EQ(stats_.gets, 1);
+}
+
 TEST(FilesystemTest, Listdir1) {
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Creat("/1"));
