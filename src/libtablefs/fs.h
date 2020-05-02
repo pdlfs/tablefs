@@ -63,8 +63,8 @@ struct User {
 };
 
 class FilesystemDb;
-// A prototype implementation of TableFS as published in USENIX ATC 2013:
-//  - https://www.usenix.org/node/174519
+// A prototype re-implementation of the TableFS published at USENIX ATC 2013
+// (https://www.usenix.org/node/174519). Implementation is thread-safe.
 class Filesystem {
  public:
   explicit Filesystem(const FilesystemOptions& options);
@@ -112,7 +112,7 @@ class Filesystem {
   // invoked. When "Fetch" is invoked, the result will be inserted into the
   // cache allowing subsequent lookups to go faster. Set c to NULL when caching
   // is disabled and each lookup hits db.
-  Status LookupWithCache(FilesystemLookupCache* const c, const User& who,
+  Status LookupWithCache(FilesystemLookupCache* c, const User& who,
                          const Stat& parent_dir, const Slice& name, Stat* stat,
                          FilesystemDbStats* stats);
 
