@@ -48,6 +48,10 @@ addons:
     update: false
     packages:
       - libsnappy-dev
+  homebrew:
+    update: false
+    packages:
+      - snappy
 
 script:
   - date
