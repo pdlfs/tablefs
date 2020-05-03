@@ -59,7 +59,7 @@ script:
           -DCMAKE_CXX_COMPILER=`which $CXX`-DCMAKE_C_COMPILER=`which $CC` \
           -DTABLEFS_PORT_KVRANGE=OFF -DTABLEFS_PORT_LEVELDB=OFF \
           -DTABLEFS_COMMON_INTREE=ON \
-          -DPDLFS_SNAPPY=ON
+          -DPDLFS_SNAPPY=ON \
           -DBUILD_SHARED_LIBS=ON \
           -DBUILD_TESTS=ON \
           ..
