@@ -39,6 +39,9 @@ os:
   - linux
   - osx
 
+osx_image: xcode11.3
+dist: bionic
+
 env:
   global:
     - GIT_SSL_NO_VERIFY=true
