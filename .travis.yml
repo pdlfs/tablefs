@@ -43,24 +43,25 @@ env:
   global:
     - GIT_SSL_NO_VERIFY=true
 
-before_script:
-  - ${CXX} --version
-  - ${CC} --version
+addons:
+  apt:
+    update: false
+    packages:
+      - libsnappy-dev
 
 script:
   - date
-  - mkdir -p /tmp/deltafs
+  - mkdir -p /tmp/tablefs
   - mkdir -p bu
   - cd bu
   - >
-    cmake --verbose=1 -DCMAKE_INSTALL_PREFIX=/tmp/deltafs \
-          -DCMAKE_CXX_COMPILER=`which $CXX` \
-          -DCMAKE_C_COMPILER=`which $CC` \
+    cmake --verbose=1 -DCMAKE_INSTALL_PREFIX=/tmp/tablefs \
+          -DCMAKE_CXX_COMPILER=`which $CXX`-DCMAKE_C_COMPILER=`which $CC` \
+          -DTABLEFS_PORT_KVRANGE=OFF -DTABLEFS_PORT_LEVELDB=OFF \
+          -DTABLEFS_COMMON_INTREE=ON \
+          -DPDLFS_SNAPPY=ON
           -DBUILD_SHARED_LIBS=ON \
           -DBUILD_TESTS=ON \
-          -DTABLEFS_COMMON_INTREE=ON \
-          -DTABLEFS_PORT_KVRANGE=OFF \
-          -DTABLEFS_PORT_LEVELDB=OFF \
           ..
   - make
   - ctest -VV --output-on-failure
