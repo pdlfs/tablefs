@@ -15,9 +15,9 @@
  * found at https://github.com/google/leveldb.
  */
 #include "pdlfs-common/env.h"
+
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/env_lazy.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 
@@ -72,8 +72,8 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   if (env_conf.empty()) {
     env_conf_str = "~";
   }
-  Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
-  Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
+  // Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
+  // Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
 #endif
 // RADOS
 #if defined(PDLFS_RADOS)
@@ -86,7 +86,7 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
     return Env::GetUnBufferedIoEnv();
   }
   if (env_name.empty()) {
-    Warn(__LOG_ARGS__, "Open env without specifying a name...");
+    // Warn(__LOG_ARGS__, "Open env without specifying a name...");
   }
   if (env_name.empty() || env_name == "default") {
     *is_system = true;
@@ -225,6 +225,16 @@ class NoOpLogger : public Logger {
   }
 };
 }  // namespace
+
+void Log0v(Logger* logger, const char* srcfile, int srcln, int loglvl,
+           const char* fmt, ...) {
+  if (logger) {
+    va_list ap;
+    va_start(ap, fmt);
+    logger->Logv(srcfile, srcln, 0, loglvl, fmt, ap);
+    va_end(ap);
+  }
+}
 
 Logger* Logger::Default() {
 #if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)
