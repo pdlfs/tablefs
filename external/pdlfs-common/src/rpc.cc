@@ -10,6 +10,7 @@
  */
 #include "pdlfs-common/rpc.h"
 
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
@@ -620,8 +621,9 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
 //  Verbose(__LOG_ARGS__, 1, "rpc.uri -> %s", options.uri.c_str());
 //  Verbose(__LOG_ARGS__, 1, "rpc.timeout -> %llu (microseconds)",
 //          (unsigned long long)options.rpc_timeout);
-//  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads -> %d", options.num_rpc_threads);
-//  Verbose(__LOG_ARGS__, 1, "rpc.extra_workers -> [%s]",
+//  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads -> %d",
+//  options.num_rpc_threads); Verbose(__LOG_ARGS__, 1, "rpc.extra_workers ->
+//  [%s]",
 //          options.extra_workers != NULL
 //              ? options.extra_workers->ToDebugString().c_str()
 //              : "NULL");
@@ -646,7 +648,7 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
     fwrite(msg, 1, sizeof(msg), stderr);
     abort();
 #else
-    Error(__LOG_ARGS__, "No rpc implementation is available");
+    Log(Logger::Default(), 0, "No rpc implementation is available");
     exit(EXIT_FAILURE);
 #endif
   } else {

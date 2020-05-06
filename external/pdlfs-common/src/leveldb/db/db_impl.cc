@@ -131,6 +131,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       logfile_number_(0),
       log_(NULL),
       seed_(0),
+      l0_soft_limits_(0),
+      l0_hard_limits_(0),
+      l0_waits_(0),
       bg_compaction_paused_(0),
       bg_compaction_scheduled_(false),
       bulk_insert_in_progress_(false),
@@ -1557,16 +1560,19 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       break;
     } else if (!options_.disable_compaction && allow_delay &&
                versions_->NumLevelFiles(0) >= options_.l0_soft_limit) {
-      // We are getting close to hitting a hard limit on the number of
-      // L0 files.  Rather than delaying a single write by several
-      // seconds when we hit the hard limit, start delaying each
-      // individual write by 1ms to reduce latency variance.  Also,
-      // this delay hands over some CPU to the compaction thread in
-      // case it is sharing the same core as the writer.
+      // We are getting close to hitting a hard limit on the number of L0 files.
+      // Rather than delaying a single write by several seconds when we hit the
+      // hard limit, start delaying each individual write by 1ms to reduce
+      // latency variance. Also, this delay hands over some CPU to the
+      // compaction thread in case it is sharing the same core as the writer.
       mutex_.Unlock();
+#if VERBOSE >= 5
+      Log(options_.info_log, 5, "Too many L0 files; slowing down...");
+#endif
       SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
+      l0_soft_limits_++;
     } else if (!force && mem_ != NULL &&
                mem_->ApproximateMemoryUsage() <= options_.write_buffer_size) {
       // There is room in current memtable
@@ -1578,6 +1584,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, 5, "Current memtable full; waiting...");
 #endif
       bg_cv_.Wait();
+      l0_waits_++;
     } else if (!options_.disable_compaction &&
                versions_->NumLevelFiles(0) >= options_.l0_hard_limit) {
       // There are too many level-0 files.
@@ -1585,6 +1592,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, 5, "Too many L0 files; waiting...");
 #endif
       bg_cv_.Wait();
+      l0_hard_limits_++;
     } else if (!options_.no_memtable) {
       // Close the current log file and open a new one
       if (!options_.disable_write_ahead_log) {
@@ -1698,6 +1706,19 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
         value->append(buf);
       }
     }
+    return true;
+  } else if (in == "l0-events") {
+    char buf[100];
+    snprintf(buf, sizeof(buf),
+             "L0 Waits      Counts\n"
+             "----------------------\n"
+             "Soft            %llu\n"
+             "Hard            %llu\n"
+             "MemTable        %llu\n",
+             static_cast<unsigned long long>(l0_soft_limits_),
+             static_cast<unsigned long long>(l0_hard_limits_),
+             static_cast<unsigned long long>(l0_waits_));
+    value->append(buf);
     return true;
   } else if (in == "sstables") {
     *value = versions_->current()->DebugString();

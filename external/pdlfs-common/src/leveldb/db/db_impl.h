@@ -18,10 +18,11 @@
 
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/env.h"
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/snapshot.h"
+
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/port.h"
 
@@ -188,7 +189,13 @@ class DBImpl : public DB {
   std::deque<Writer*> writers_;
   WriteBatch flush_memtable_;  // Dummy batch representing a compaction request
   WriteBatch sync_wal_;        // Dummy batch representing a WAL sync request
+  // Temporary storage for grouping write batches
   WriteBatch tmp_batch_;
+  // Number of time a writer is soft limited, hard limited, or waits for buffer
+  // room
+  uint64_t l0_soft_limits_;
+  uint64_t l0_hard_limits_;
+  uint64_t l0_waits_;
 
   SnapshotList snapshots_;
 
