@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "posix_env.h"
+
 #include "posix_bgrun.h"
 #include "posix_fastcopy.h"
 #include "posix_filecopy.h"
@@ -236,7 +237,7 @@ class PosixEnv : public Env {
   }
 
  private:
-  FixedThreadPool tpool_;
+  PosixThreadPool tpool_;
   LockTable locks_;
 };
 
