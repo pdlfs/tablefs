@@ -503,7 +503,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
     }
 
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
-      status = WriteMemTable(mem, edit, NULL);
+      status = DumpMemTable(mem, edit, NULL);
       if (!status.ok()) {
         // Reflect errors immediately so that conditions like full
         // file-systems cause the DB::Open() to fail.
@@ -515,7 +515,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   }
 
   if (status.ok() && mem != NULL) {
-    status = WriteMemTable(mem, edit, NULL);
+    status = DumpMemTable(mem, edit, NULL);
     // Reflect errors immediately so that conditions like full
     // file-systems cause the DB::Open() to fail.
   }
@@ -526,21 +526,23 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
 }
 
 // REQUIRES: mutex_ has been locked.
-Status DBImpl::WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base) {
+Status DBImpl::DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base) {
   mutex_.AssertHeld();
   SequenceNumber ignored_min_seq;
   SequenceNumber ignored_max_seq;
-  Iterator* iter = mem->NewIterator();
-  Status s = WriteLevel0Table(iter, edit, base, &ignored_min_seq,
-                              &ignored_max_seq, false);
+  Iterator* const iter = mem->NewIterator();
+  Status s = WriteLevel0Table(
+      iter, edit, base, &ignored_min_seq,
+      &ignored_max_seq);  // Will temporarily unlock when writing the table
   delete iter;
   return s;
 }
 
-// REQUIRES: mutex_ has been locked.
+// REQUIRES: mutex_ has been locked. May insert table into deeper levels when
+// *base is given. Otherwise, will directly insert into Level 0.
 Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                                 Version* base, SequenceNumber* min_seq,
-                                SequenceNumber* max_seq, bool force_level0) {
+                                SequenceNumber* max_seq) {
   mutex_.AssertHeld();
   const uint64_t start_micros = CurrentMicros();
   FileMetaData meta;
@@ -566,6 +568,9 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
 #endif
 
   pending_outputs_.erase(meta.number);
+  CompactionStats stats;
+  stats.n = 1;
+
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
   int level = 0;
@@ -574,20 +579,18 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
     const Slice max_user_key = meta.largest.user_key();
 
     if (base != NULL) {
-      if (!force_level0 && !options_.disable_compaction) {
+      if (!options_.disable_compaction) {
         level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
-      } else {
-        // If compaction has been disabled, or force_level0 has been set,
-        // all MemTable dumps will only go to level-0.
       }
     }
     edit->AddFile(level, meta.number, meta.file_size, meta.seq_off,
                   meta.smallest, meta.largest);
+
+    stats.bytes_written = meta.file_size;
+    stats.files = 1;
   }
 
-  CompactionStats stats;
   stats.micros = CurrentMicros() - start_micros;
-  stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
   return s;
 }
@@ -600,7 +603,7 @@ void DBImpl::CompactMemTable() {
   VersionEdit edit;
   Version* base = versions_->current();
   base->Ref();
-  Status s = WriteMemTable(imm_, &edit, base);
+  Status s = DumpMemTable(imm_, &edit, base);
   base->Unref();
 
   if (s.ok() && shutting_down_.Acquire_Load()) {
@@ -1112,14 +1115,18 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   CompactionStats stats;
   stats.micros = CurrentMicros() - start_micros - imm_micros;
+  stats.in0 = compact->compaction->num_input_files(0);
+  stats.in1 = compact->compaction->num_input_files(1);
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
     }
   }
+  stats.files = compact->outputs.size();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
+  stats.n = 1;
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
@@ -1361,11 +1368,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   w.done = false;
   w.batch = my_batch;
 
-  bool flush_or_sync = false;
-  if (my_batch == &flush_memtable_ || my_batch == &sync_wal_) {
-    flush_or_sync = true;
-  }
-
+  // A writer may be blocked by background compaction. While a writer is waiting
+  // for compaction, we allow subsequent writers to register themselves in a
+  // queue such that when the original writer is able to write it can group
+  // commit all writes in the queue making writing more efficient.
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
@@ -1375,100 +1381,102 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     return w.status;
   }
 
-  // May temporarily unlock and wait.
-  Status status = MakeRoomForWrite(my_batch == &flush_memtable_);
-  uint64_t last_sequence = versions_->LastSequence();
+  Status status;
   Writer* last_writer = &w;
-  bool sync_error = false;
+  if (my_batch != &sync_wal_) {
+    // Check memtable room for insertion. May temporarily unlock and wait. We
+    // skip this step for sync_wal_ batches because it may switch us to a
+    // new memtable and a new write ahead log file.
+    status = MakeRoomForWrite(my_batch == &flush_memtable_);
+    if (status.ok() && my_batch != &flush_memtable_) {
+      // We skip flush_memtable_ batches because they don't have any real data
+      // for insertion. For regular batches, we try adding more writes into the
+      // current batch. If we do so we will update last_writer accordingly.
+      WriteBatch* const final_batch = BuildBatchGroup(&last_writer);
+      uint64_t last_sequence = versions_->LastSequence();
+      WriteBatchInternal::SetSequence(final_batch, last_sequence + 1);
+      last_sequence += WriteBatchInternal::Count(final_batch);
 
-  if (status.ok() && !flush_or_sync) {
-    WriteBatch* updates = BuildBatchGroup(&last_writer);
-    WriteBatchInternal::SetSequence(updates, last_sequence + 1);
-    last_sequence += WriteBatchInternal::Count(updates);
-
-    // Add to log and apply to memtable.  We can release the lock
-    // during this phase since &w is currently responsible for logging
-    // and protects against concurrent loggers and concurrent writes
-    // into mem_.
-    if (!options_.no_memtable) {
-      mutex_.Unlock();
-      if (!options_.disable_write_ahead_log) {
-        status = log_->AddRecord(WriteBatchInternal::Contents(updates));
-        if (status.ok() && options.sync) {
-          status = logfile_->Sync();
-          if (!status.ok()) {
-            sync_error = true;
+      if (!options_.no_memtable) {
+        bool sync_error = false;
+        // Add to log and apply to memtable. We can release the lock during
+        // this phase since &w is currently responsible for logging and
+        // protects against concurrent loggers and concurrent writes into
+        // mem_.
+        mutex_.Unlock();
+        if (!options_.disable_write_ahead_log) {
+          status = log_->AddRecord(WriteBatchInternal::Contents(final_batch));
+          if (status.ok() && options.sync) {
+            status = logfile_->Sync();
+            if (!status.ok()) {
+              sync_error = true;
+            }
           }
         }
-      }
-      if (status.ok()) {
-        status = WriteBatchInternal::InsertInto(updates, mem_);
-      }
-      mutex_.Lock();
-    } else {
-      // Temporarily disable any background compaction
-      bg_compaction_paused_++;
-      while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
-        bg_cv_.Wait();
-      }
-
-      bulk_insert_in_progress_ = true;
-      MemTable* mem = new MemTable(internal_comparator_);
-      mem->Ref();
-
-      status = WriteBatchInternal::InsertInto(updates, mem);
-      if (status.ok()) {
-        VersionEdit edit;
-        Version* base = versions_->current();
-        base->Ref();
-        Iterator* iter = mem->NewIterator();
-        SequenceNumber ignored_min_seq;
-        SequenceNumber ignored_max_seq;
-        status = WriteLevel0Table(iter, &edit, base, &ignored_min_seq,
-                                  &ignored_max_seq, true);
-        delete iter;
-        base->Unref();
-
         if (status.ok()) {
-          versions_->SetLastSequence(last_sequence);
-          status = versions_->LogAndApply(&edit, &mutex_);
+          status = WriteBatchInternal::InsertInto(final_batch, mem_);
         }
-
-        if (!status.ok()) {
+        mutex_.Lock();
+        if (sync_error) {
+          // The state of the log file is unclear: the log record we just
+          // added may or may not show up when the DB is re-opened. So we
+          // force the db into a mode where all future writes fail.
           RecordBackgroundError(status);
         }
+
+        versions_->SetLastSequence(last_sequence);
+      } else {
+        // If there are no memtables, we directly generate an L0 table for the
+        // batch of writes. We start by temporarily pausing background
+        // compaction.
+        bg_compaction_paused_++;
+        while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+          bg_cv_.Wait();
+        }
+
+        bulk_insert_in_progress_ = true;
+        MemTable* const mem = new MemTable(internal_comparator_);
+        mem->Ref();
+        status = WriteBatchInternal::InsertInto(final_batch, mem);
+        if (status.ok()) {
+          VersionEdit edit;
+          status = DumpMemTable(mem, &edit, NULL);
+          if (status.ok()) {
+            versions_->SetLastSequence(last_sequence);
+            status = versions_->LogAndApply(&edit, &mutex_);
+          } else {
+            RecordBackgroundError(status);
+          }
+        }
+
+        mem->Unref();
+        bulk_insert_in_progress_ = false;
+        // Restart background compaction
+        assert(bg_compaction_paused_ > 0);
+        bg_compaction_paused_--;
+        MaybeScheduleCompaction();
+        bg_cv_.SignalAll();
       }
 
-      mem->Unref();
-      bulk_insert_in_progress_ = false;
-      // Restart background compaction
-      assert(bg_compaction_paused_ > 0);
-      bg_compaction_paused_--;
-      MaybeScheduleCompaction();
-      bg_cv_.SignalAll();
+      if (final_batch == &tmp_batch_) {
+        final_batch->Clear();
+      }
     }
-
-    if (updates == &tmp_batch_) {
-      updates->Clear();
-    }
-
-    versions_->SetLastSequence(last_sequence);
-  } else if (status.ok() && my_batch == &sync_wal_) {
+  } else {
+    // If we are working on a sync_wal request, sync the write ahead log file
+    // here and we are done.
     if (!options_.disable_write_ahead_log) {
+      bool sync_error = false;
       mutex_.Unlock();
       status = logfile_->Sync();
       if (!status.ok()) {
         sync_error = true;
       }
       mutex_.Lock();
+      if (sync_error) {
+        RecordBackgroundError(status);
+      }
     }
-  }
-
-  if (sync_error) {
-    // The state of the log file is indeterminate: the log record we
-    // just added may or may not show up when the DB is re-opened.
-    // So we force the DB into a mode where all future writes fail.
-    RecordBackgroundError(status);
   }
 
   while (true) {
@@ -1642,10 +1650,7 @@ Status DBImpl::BulkInsert(Iterator* iter) {
 
   bulk_insert_in_progress_ = true;
   VersionEdit edit;
-  Version* base = versions_->current();
-  base->Ref();
-  s = WriteLevel0Table(iter, &edit, base, &min_seq, &max_seq, true);
-  base->Unref();
+  s = WriteLevel0Table(iter, &edit, NULL, &min_seq, &max_seq);
   if (s.ok()) {
     if (max_seq > versions_->LastSequence()) {
       versions_->SetLastSequence(max_seq);
@@ -1690,16 +1695,30 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
   } else if (in == "stats") {
     char buf[200];
-    snprintf(buf, sizeof(buf),
-             "                               Compactions\n"
-             "Level  Files Size(MB) Time(sec) Read(MB) Write(MB)\n"
-             "--------------------------------------------------\n");
+    snprintf(
+        buf, sizeof(buf),
+        "                              Files                  Compactions\n");
+    value->append(buf);
+    snprintf(
+        buf, sizeof(buf),
+        "Level  Files Size(MB) Input0 Input1 Output Counts Time(sec) Read(MB) "
+        "Write(MB)\n");
+    value->append(buf);
+    snprintf(
+        buf, sizeof(buf),
+        "----------------------------------------------------------------------"
+        "--------\n");
     value->append(buf);
     for (int level = 0; level < config::kNumLevels; level++) {
       int files = versions_->NumLevelFiles(level);
       if (stats_[level].micros > 0 || files > 0) {
-        snprintf(buf, sizeof(buf), "%3d %8d %8.0f %9.0f %8.0f %9.0f\n", level,
-                 files, versions_->NumLevelBytes(level) / 1048576.0,
+        snprintf(buf, sizeof(buf),
+                 "%3d %8d %8.0f %6lld %6lld %6lld %6lld %9.0f %8.0f %9.0f\n",
+                 level, files, versions_->NumLevelBytes(level) / 1048576.0,
+                 static_cast<long long>(stats_[level].in0),
+                 static_cast<long long>(stats_[level].in1),
+                 static_cast<long long>(stats_[level].files),
+                 static_cast<long long>(stats_[level].n),
                  stats_[level].micros / 1e6,
                  stats_[level].bytes_read / 1048576.0,
                  stats_[level].bytes_written / 1048576.0);
@@ -1708,13 +1727,9 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
     return true;
   } else if (in == "l0-events") {
-    char buf[100];
+    char buf[200];
     snprintf(buf, sizeof(buf),
-             "L0 Waits      Counts\n"
-             "----------------------\n"
-             "Soft            %llu\n"
-             "Hard            %llu\n"
-             "MemTable        %llu\n",
+             "Soft-Limit Hard-Limit MemTable\n%-10llu %-10lld %-8lld\n",
              static_cast<unsigned long long>(l0_soft_limits_),
              static_cast<unsigned long long>(l0_hard_limits_),
              static_cast<unsigned long long>(l0_waits_));

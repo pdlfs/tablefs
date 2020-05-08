@@ -131,10 +131,9 @@ class DBImpl : public DB {
   virtual Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
                                 SequenceNumber* max_sequence);
 
-  Status WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base);
+  Status DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base);
   Status WriteLevel0Table(Iterator* iter, VersionEdit* edit, Version* base,
-                          SequenceNumber* min_seq, SequenceNumber* max_seq,
-                          bool force_level0);
+                          SequenceNumber* min_seq, SequenceNumber* max_seq);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
@@ -231,13 +230,32 @@ class DBImpl : public DB {
     int64_t micros;
     int64_t bytes_read;
     int64_t bytes_written;
+    // Number of files produced.
+    int64_t files;
+    // Number of files read at the target level of compaction.
+    int64_t in0;
+    // Number of files read at the parent level.
+    int64_t in1;
+    // Number of compactions.
+    int64_t n;
 
-    CompactionStats() : micros(0), bytes_read(0), bytes_written(0) {}
+    CompactionStats()
+        : micros(0),
+          bytes_read(0),
+          bytes_written(0),
+          files(0),
+          in0(0),
+          in1(0),
+          n(0) {}
 
     void Add(const CompactionStats& c) {
       this->micros += c.micros;
       this->bytes_read += c.bytes_read;
       this->bytes_written += c.bytes_written;
+      this->files += c.files;
+      this->in0 += c.in0;
+      this->in1 += c.in1;
+      this->n += c.n;
     }
   };
   CompactionStats stats_[config::kNumLevels];
