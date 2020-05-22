@@ -97,9 +97,12 @@ class RPC {
   // without requiring explicit synchronization at the caller side.
   static RPC* Open(const RPCOptions& rpcopts);
 
+  // Return the uri of the server.
+  virtual std::string GetUri() = 0;
+
   // Connect or bind to a remote peer and return a stub for RPC communications.
   // The returned result should be deleted when it is no longer needed.
-  virtual rpc::If* OpenStubFor(const std::string& addr) = 0;
+  virtual rpc::If* OpenStubFor(const std::string& uri) = 0;
 
   // Start a fixed amount of threads to progressing RPC in the background. If
   // background progressing is unnecessary, this may be a non-op.
@@ -109,7 +112,7 @@ class RPC {
   virtual Status Stop() = 0;
 
   // Return errors if there is any.
-  virtual Status status() const;
+  virtual Status status();
 
  private:
   // No copying allowed
