@@ -39,6 +39,8 @@ RPCOptions::RPCOptions()
       env(NULL),
       fs(NULL) {}
 
+std::string RPC::GetUri() { return std::string("-1:-1"); }
+
 Status RPC::status() { return Status::OK(); }
 
 RPC::~RPC() {}
@@ -136,7 +138,8 @@ class MercuryRPCImpl : public RPC {
   MercuryRPC* rpc_;
 
  public:
-  virtual Status status() const { return rpc_->status(); }
+  virtual std::string GetUri() { return std::string("-1:-1"); }
+  virtual Status status() { return rpc_->status(); }
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }
 

@@ -106,7 +106,7 @@ Status PosixTCPServer::BGLoop(int myid) {
 }
 
 void PosixTCPServer::HandleIncomingCall(CallState* const call) {
-  int err;
+  int err = 0;
   rpc::If::Message in, out;
   const uint64_t start = CurrentMicros();
   struct pollfd po;
@@ -147,10 +147,17 @@ void PosixTCPServer::HandleIncomingCall(CallState* const call) {
   }
 
   srv_->Call(in, out);
-  ssize_t nbytes = send(call->fd, out.contents.data(), out.contents.size(), 0);
-  if (nbytes != out.contents.size()) {
-    //
-    return;
+  Slice remaining_out = out.contents;
+  SET_O_NONBLOCK(call->fd, false);  // Force blocking semantics
+  while (!remaining_out.empty()) {
+    ssize_t nbytes =
+        send(call->fd, remaining_out.data(), remaining_out.size(), 0);
+    if (nbytes > 0) {
+      remaining_out.remove_prefix(nbytes);
+    } else {
+      //
+      return;
+    }
   }
 
   shutdown(call->fd, SHUT_WR);
@@ -191,11 +198,17 @@ Status PosixTCPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
   if (!status.ok()) {
     return status;
   }
-  ssize_t rv = send(fd, in.contents.data(), in.contents.size(), 0);
-  if (rv != in.contents.size()) {
-    status = Status::IOError(strerror(errno));
-    close(fd);
-    return status;
+  Slice remaining_in = in.contents;
+  SET_O_NONBLOCK(fd, false);  // Force blocking semantics
+  while (!remaining_in.empty()) {
+    ssize_t nbytes = send(fd, remaining_in.data(), remaining_in.size(), 0);
+    if (nbytes > 0) {
+      remaining_in.remove_prefix(nbytes);
+    } else {
+      status = Status::IOError(strerror(errno));
+      close(fd);
+      return status;
+    }
   }
   shutdown(fd, SHUT_WR);
   const uint64_t start = CurrentMicros();
@@ -205,7 +218,7 @@ Status PosixTCPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
   po.fd = fd;
   char* const buf = new char[buf_sz_];
   while (true) {
-    rv = recv(fd, buf, buf_sz_, MSG_DONTWAIT);
+    ssize_t rv = recv(fd, buf, buf_sz_, MSG_DONTWAIT);
     if (rv > 0) {
       out.extra_buf.append(buf, rv);
       continue;
