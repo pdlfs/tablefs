@@ -30,10 +30,8 @@ set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      log_reader.cc log_writer.cc murmur.cc port_posix.cc
      posix/posix_bgrun.cc posix/posix_filecopy.cc
      posix/posix_env.cc posix/posix_fastcopy.cc posix/posix_logger.cc
-     posix/posix_mmap.cc posix/posix_net.cc posix/posix_rpc.cc
-     posix/posix_rpc_tcp.cc posix/posix_rpc_udp.cc
-     random.cc slice.cc spooky/SpookyV2.cpp spooky.cc
-     status.cc strutil.cc testharness.cc testutil.cc
+     posix/posix_mmap.cc random.cc slice.cc spooky/SpookyV2.cpp
+     spooky.cc status.cc strutil.cc testharness.cc testutil.cc
      xxhash/xxhash.c xxhash.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
      crc32c/crc32c_test.cc env_test.cc fsdbx_test.cc
@@ -59,8 +57,9 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
 
 # common dfs sources and tests
 if (PDLFS_DFS_COMMON)
-    set (pdlfs-dfs-srcs gigaplus.cc fio.cc osd.cc
-            ofs.cc ofs_impl.cc posix/posix_fio.cc
+    set (pdlfs-dfs-srcs gigaplus.cc fio.cc osd.cc ofs.cc ofs_impl.cc
+            posix/posix_fio.cc posix/posix_net.cc posix/posix_rpc.cc
+            posix/posix_rpc_tcp.cc posix/posix_rpc_udp.cc
             rpc.cc)
     set (pdlfs-dfs-tests gigaplus_test.cc fio_test.cc
             ofs_test.cc osd_test.cc
