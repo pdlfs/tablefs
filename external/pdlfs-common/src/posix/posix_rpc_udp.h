@@ -20,9 +20,7 @@ namespace pdlfs {
 class PosixUDPServer : public PosixSocketServer {
  public:
   explicit PosixUDPServer(const RPCOptions& options, size_t max_msgsz = 1432);
-  virtual ~PosixUDPServer() {
-    BGStop();
-  }  // More resources to be released by parent
+  virtual ~PosixUDPServer();
 
   // On OK, BGStart() from parent should then be called to commence background
   // server progressing.
@@ -32,14 +30,24 @@ class PosixUDPServer : public PosixSocketServer {
  private:
   // State for each incoming procedure call.
   struct CallState {
-    struct sockaddr_storage addr;  // Location of the caller
+    PosixUDPServer* parent_srv;  // Back pointer to the server
+    // Location of the caller
+    struct sockaddr_storage addrstor;
+    struct sockaddr* addrbuf() {
+      return reinterpret_cast<struct sockaddr*>(&addrstor);
+    }
     socklen_t addrlen;
     size_t msgsz;  // Payload size
     char msg[1];
   };
-  void HandleIncomingCall(CallState* call);
+  CallState* CreateCallState();
+  void HandleIncomingCall(CallState** call);  // May send call to bg worker pool
+  void ProcessCall(CallState* call);
+  static void ProcessCallWrapper(void* arg);
   virtual Status BGLoop(int myid);
   const size_t max_msgsz_;  // Buffer size for incoming rpc messages
+  // State below protected by mutex_
+  int bg_work_;  // Total number of bg work items pending
 };
 
 // UDP client.

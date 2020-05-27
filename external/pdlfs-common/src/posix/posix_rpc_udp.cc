@@ -22,7 +22,16 @@
 namespace pdlfs {
 
 PosixUDPServer::PosixUDPServer(const RPCOptions& options, size_t max_msgsz)
-    : PosixSocketServer(options), max_msgsz_(max_msgsz) {}
+    : PosixSocketServer(options), max_msgsz_(max_msgsz), bg_work_(0) {}
+
+PosixUDPServer::~PosixUDPServer() {
+  BGStop();  // Stop receiving new messages
+  MutexLock ml(&mutex_);
+  while (bg_work_ != 0) {  // Wait until all existing messages are processed
+    bg_cv_.Wait();
+  }
+  // More resources will be released by parent
+}
 
 Status PosixUDPServer::OpenAndBind(const std::string& uri) {
   MutexLock ml(&mutex_);
@@ -60,24 +69,29 @@ Status PosixUDPServer::OpenAndBind(const std::string& uri) {
   return status;
 }
 
+inline PosixUDPServer::CallState* PosixUDPServer::CreateCallState() {
+  CallState* const call = static_cast<CallState*>(
+      malloc(sizeof(struct CallState) - 1 + max_msgsz_));
+  call->parent_srv = this;
+  return call;
+}
+
 Status PosixUDPServer::BGLoop(int myid) {
+  CallState* call = CreateCallState();
   struct pollfd po;
   po.events = POLLIN;
   po.fd = fd_;
-  CallState* const call = static_cast<CallState*>(
-      malloc(sizeof(struct CallState) - 1 + max_msgsz_));
 
   int err = 0;
   while (!err && !shutting_down_.Acquire_Load()) {
-    call->addrlen = sizeof(call->addr);
+    call->addrlen = sizeof(call->addrstor);
     // Try performing a quick non-blocking receive from peers before sinking
     // into poll.
     ssize_t rv = recvfrom(fd_, call->msg, max_msgsz_, MSG_DONTWAIT,
-                          reinterpret_cast<struct sockaddr*>(&call->addr),
-                          &call->addrlen);
+                          call->addrbuf(), &call->addrlen);
     if (rv > 0) {
       call->msgsz = rv;
-      HandleIncomingCall(call);
+      HandleIncomingCall(&call);
       continue;
     } else if (rv == 0) {  // Empty message
       continue;
@@ -100,20 +114,46 @@ Status PosixUDPServer::BGLoop(int myid) {
   return status;
 }
 
-void PosixUDPServer::HandleIncomingCall(CallState* const call) {
+void PosixUDPServer::HandleIncomingCall(CallState** call) {
+  if (options_.extra_workers) {
+    mutex_.Lock();
+    ++bg_work_;
+    // XXX: senders/callers are implicitly rate-limited by not sending them
+    // replies. Should we more explicitly rate-limit them?
+    options_.extra_workers->Schedule(ProcessCallWrapper, *call);
+    mutex_.Unlock();
+    *call = CreateCallState();
+  } else {
+    ProcessCall(*call);
+  }
+}
+
+void PosixUDPServer::ProcessCallWrapper(void* arg) {
+  CallState* const call = reinterpret_cast<CallState*>(arg);
+  PosixUDPServer* const srv = call->parent_srv;
+  srv->ProcessCall(call);
+  free(call);
+  MutexLock ml(&srv->mutex_);
+  assert(srv->bg_work_ > 0);
+  --srv->bg_work_;
+  if (!srv->bg_work_) {
+    srv->bg_cv_.SignalAll();
+  }
+}
+
+void PosixUDPServer::ProcessCall(CallState* const call) {
   rpc::If::Message in, out;
   in.contents = Slice(call->msg, call->msgsz);
   options_.fs->Call(in, out);
-  struct sockaddr* const addr = reinterpret_cast<struct sockaddr*>(&call->addr);
   ssize_t nbytes = sendto(fd_, out.contents.data(), out.contents.size(), 0,
-                          addr, call->addrlen);
+                          call->addrbuf(), call->addrlen);
   if (nbytes != out.contents.size()) {
 #if VERBOSE >= 1
     const int errno_copy = errno;  // Store a copy before calling getnameinfo()
     char host[NI_MAXHOST];
     char port[NI_MAXSERV];
-    getnameinfo(addr, call->addrlen, host, sizeof(host), port, sizeof(port),
-                NI_NUMERICHOST | NI_NUMERICSERV);
+    getnameinfo(call->addrbuf(), call->addrlen, host, sizeof(host), port,
+                sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     Log(options_.info_log, 1, "Fail to send data to peer[%s:%s]: %s", host,
         port, strerror(errno_copy));
 #else
