@@ -13,7 +13,6 @@
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/status.h"
 
-#include <errno.h>
 #include <string>
 #include <vector>
 
@@ -42,7 +41,7 @@ enum Mode { kServerClient, kClientOnly };
 // (kMercuryRPC) and a Margo-based (kMargoRPC) implementation that wraps around
 // the corresponding RPC framework to implement RPC routines. Both the Mercury
 // and the Margo RPC frameworks can utilize various low-level network transports
-// (e.g., RDMA, GNI, libfabric) to more efficiently move data over the network.
+// (e.g., RDMA, GNI) that more efficiently moves data over the network.
 enum Engine { kSocketRPC, kMercuryRPC, kMargoRPC };
 
 // All RPC messages are fired through rpc::If. This is the one and only
@@ -57,19 +56,28 @@ struct RPCOptions {
   std::string uri;
   uint64_t rpc_timeout;  // In microseconds, Default: 5 secs
 
-  // Total number of threads used to drive RPC work and execute
-  // RPC callback functions. RPC implementation may choose to dedicate
-  // some of them to only drive RPC work and the rest to
-  // execute RPC callback functions.
+  // Total number of threads used to drive the core RPC work and execute
+  // callback functions that handle incoming messages. An RPC implementation may
+  // choose to dedicate some of them to only drive RPC work and the rest to
+  // handle incoming messages.
   int num_rpc_threads;  // Default: 1
 
-  // If not NULL, RPC callback functions will be redirected to
-  // the pool instead of I/O threads for execution.
+  // If not NULL, incoming messages will be redirected to the thread pool for
+  // handling.
   ThreadPool* extra_workers;  // Default: NULL
 
   // Max number of server addrs that may be cached locally
+  // XXX: not all RPC implementations use this. We could remove this from the
+  // options struct, change RPC::Open(...) to RPC::Open(const char* rpc_impl,
+  // const RPCOptions& options, const char* extra_options), and cancel the
+  // rpc::Engine enum class (it is now specified as a plain string).
   size_t addr_cache_size;  //  Default: 128
   Env* env;  // Default: NULL, which indicates Env::Default() should be used
+  // Env* is only used for starting background progressing threads.
+
+  // Logger object for recoding progress/error information.
+  // If NULL, Logger::Default() will be used.
+  Logger* info_log;
 
   // Server callback implementation.
   // Not needed for clients.
@@ -160,10 +168,10 @@ class If {
  public:
   // Each message holds a chunk of data opaque to the RPC implementation.
   // This makes it easier for us to program against different RPC frameworks
-  // with potentially different type systems.
+  // with different type systems.
   struct Message {
-    int op;          // Operation type
-    int err;         // Error code
+    int op;          // Operation type. XXX: To be removed. No longer used.
+    int err;         // Error code. XXX: To be removed. No longer used.
     Slice contents;  // Message body, reference to the
     Message() : op(0), err(0) {}
 

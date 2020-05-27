@@ -19,7 +19,7 @@ namespace pdlfs {
 // RPC srv impl using UDP.
 class PosixUDPServer : public PosixSocketServer {
  public:
-  explicit PosixUDPServer(rpc::If* srv, size_t max_msgsz = 1432);
+  explicit PosixUDPServer(const RPCOptions& options, size_t max_msgsz = 1432);
   virtual ~PosixUDPServer() {
     BGStop();
   }  // More resources to be released by parent
@@ -40,7 +40,6 @@ class PosixUDPServer : public PosixSocketServer {
   void HandleIncomingCall(CallState* call);
   virtual Status BGLoop(int myid);
   const size_t max_msgsz_;  // Buffer size for incoming rpc messages
-  rpc::If* const srv_;
 };
 
 // UDP client.

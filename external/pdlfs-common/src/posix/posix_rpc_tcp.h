@@ -19,7 +19,8 @@ namespace pdlfs {
 // RPC srv impl using TCP.
 class PosixTCPServer : public PosixSocketServer {
  public:
-  PosixTCPServer(rpc::If* srv, uint64_t timeout, size_t buf_sz = 4000);
+  PosixTCPServer(const RPCOptions& options, uint64_t timeout,
+                 size_t buf_sz = 4000);
   virtual ~PosixTCPServer() {
     BGStop();
   }  // More resources to be released by parent
@@ -40,7 +41,6 @@ class PosixTCPServer : public PosixSocketServer {
   virtual Status BGLoop(int myid);
   const uint64_t rpc_timeout_;  // In microseconds
   const size_t buf_sz_;         // Buffer size for reading peer data
-  rpc::If* const srv_;
 };
 
 // TCP client.

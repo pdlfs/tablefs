@@ -89,8 +89,9 @@ Status PosixSocketAddr::Resolv(const char* host, bool is_numeric) {
   return Status::OK();
 }
 
-PosixSocketServer::PosixSocketServer()
-    : shutting_down_(NULL),
+PosixSocketServer::PosixSocketServer(const RPCOptions& options)
+    : options_(options),
+      shutting_down_(NULL),
       bg_cv_(&mutex_),
       bg_n_(0),
       bg_threads_(0),
@@ -168,15 +169,18 @@ PosixSocketServer::~PosixSocketServer() {
   }
 }
 
+namespace {
+inline PosixSocketServer* CreateServer(const RPCOptions& options, int tcp) {
+  if (tcp) return new PosixTCPServer(options, options.rpc_timeout);
+  return new PosixUDPServer(options);
+}
+}  // namespace
+
 PosixRPC::PosixRPC(const RPCOptions& options)
     : srv_(NULL), options_(options), tcp_(0) {
   tcp_ = Slice(options_.uri).starts_with("tcp://");
   if (options_.mode == rpc::kServerClient) {
-    if (tcp_) {
-      srv_ = new PosixTCPServer(options_.fs, options_.rpc_timeout);
-    } else {
-      srv_ = new PosixUDPServer(options_.fs);
-    }
+    srv_ = CreateServer(options_, tcp_);
   }
 }
 

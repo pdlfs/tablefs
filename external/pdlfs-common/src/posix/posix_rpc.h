@@ -56,7 +56,7 @@ class PosixSocketAddr {
 // extended by subclasses.
 class PosixSocketServer {
  public:
-  PosixSocketServer();
+  explicit PosixSocketServer(const RPCOptions& options);
   virtual ~PosixSocketServer();
 
   virtual std::string GetUri() = 0;
@@ -78,6 +78,7 @@ class PosixSocketServer {
   void BGCall();
   virtual Status BGLoop(int myid) = 0;  // To be implemented by subclasses...
 
+  const RPCOptions& options_;  // For options_.info_log and options_.fs
   port::Mutex mutex_;
   // bg state below is protected by mutex_
   port::AtomicPointer shutting_down_;

@@ -19,8 +19,8 @@
 #include <unistd.h>
 
 namespace pdlfs {
-PosixTCPServer::PosixTCPServer(rpc::If* srv, uint64_t timeout, size_t buf_sz)
-    : rpc_timeout_(timeout), buf_sz_(buf_sz), srv_(srv) {}
+PosixTCPServer::PosixTCPServer(const RPCOptions& opts, uint64_t t, size_t s)
+    : PosixSocketServer(opts), rpc_timeout_(t), buf_sz_(s) {}
 
 Status PosixTCPServer::OpenAndBind(const std::string& uri) {
   MutexLock ml(&mutex_);
@@ -146,7 +146,7 @@ void PosixTCPServer::HandleIncomingCall(CallState* const call) {
     return;
   }
 
-  srv_->Call(in, out);
+  options_.fs->Call(in, out);
   Slice remaining_out = out.contents;
   SET_O_NONBLOCK(call->fd, false);  // Force blocking semantics
   while (!remaining_out.empty()) {

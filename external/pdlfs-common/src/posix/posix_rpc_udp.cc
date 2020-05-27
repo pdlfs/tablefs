@@ -10,17 +10,19 @@
  */
 #include "posix_rpc_udp.h"
 
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
 
 #include <errno.h>
+#include <netdb.h>
 #include <poll.h>
 #include <string.h>
 #include <unistd.h>
 
 namespace pdlfs {
 
-PosixUDPServer::PosixUDPServer(rpc::If* srv, size_t max_msgsz)
-    : max_msgsz_(max_msgsz), srv_(srv) {}
+PosixUDPServer::PosixUDPServer(const RPCOptions& options, size_t max_msgsz)
+    : PosixSocketServer(options), max_msgsz_(max_msgsz) {}
 
 Status PosixUDPServer::OpenAndBind(const std::string& uri) {
   MutexLock ml(&mutex_);
@@ -101,12 +103,22 @@ Status PosixUDPServer::BGLoop(int myid) {
 void PosixUDPServer::HandleIncomingCall(CallState* const call) {
   rpc::If::Message in, out;
   in.contents = Slice(call->msg, call->msgsz);
-  srv_->Call(in, out);
-  ssize_t nbytes =
-      sendto(fd_, out.contents.data(), out.contents.size(), 0,
-             reinterpret_cast<struct sockaddr*>(&call->addr), call->addrlen);
+  options_.fs->Call(in, out);
+  struct sockaddr* const addr = reinterpret_cast<struct sockaddr*>(&call->addr);
+  ssize_t nbytes = sendto(fd_, out.contents.data(), out.contents.size(), 0,
+                          addr, call->addrlen);
   if (nbytes != out.contents.size()) {
-    //
+#if VERBOSE >= 1
+    const int errno_copy = errno;  // Store a copy before calling getnameinfo()
+    char host[NI_MAXHOST];
+    char port[NI_MAXSERV];
+    getnameinfo(addr, call->addrlen, host, sizeof(host), port, sizeof(port),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+    Log(options_.info_log, 1, "Fail to send data to peer[%s:%s]: %s", host,
+        port, strerror(errno_copy));
+#else
+    Log(options_.info_log, 0, "Error sending: %s", strerror(errno));
+#endif
   }
 }
 

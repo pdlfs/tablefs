@@ -13,10 +13,10 @@
 #include "posix/posix_rpc.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/port.h"
 
+#include <assert.h>
+#include <stdlib.h>
 #include <vector>
 
 #if defined(PDLFS_MARGO_RPC)
@@ -37,6 +37,7 @@ RPCOptions::RPCOptions()
       extra_workers(NULL),
       addr_cache_size(128),
       env(NULL),
+      info_log(NULL),
       fs(NULL) {}
 
 std::string RPC::GetUri() { return std::string("-1:-1"); }
@@ -167,19 +168,21 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   assert(raw_options.uri.size() != 0);
   assert(raw_options.mode != rpc::kServerClient || raw_options.fs != NULL);
   RPCOptions options(raw_options);
-  if (options.env == NULL) {
+  if (!options.info_log) {
+    options.info_log = Logger::Default();
+  }
+  if (!options.env) {
     options.env = Env::Default();
   }
 #if VERBOSE >= 1
-//  Verbose(__LOG_ARGS__, 1, "rpc.uri -> %s", options.uri.c_str());
-//  Verbose(__LOG_ARGS__, 1, "rpc.timeout -> %llu (microseconds)",
-//          (unsigned long long)options.rpc_timeout);
-//  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads -> %d",
-//  options.num_rpc_threads); Verbose(__LOG_ARGS__, 1, "rpc.extra_workers ->
-//  [%s]",
-//          options.extra_workers != NULL
-//              ? options.extra_workers->ToDebugString().c_str()
-//              : "NULL");
+  Log(options.info_log, 1, "rpc.uri -> %s", options.uri.c_str());
+  Log(options.info_log, 1, "rpc.timeout -> %llu (microseconds)",
+      static_cast<unsigned long long>(options.rpc_timeout));
+  Log(options.info_log, 1, "rpc.num_io_threads -> %d", options.num_rpc_threads);
+  Log(options.info_log, 1, "rpc.extra_workers -> [%s]",
+      options.extra_workers != NULL
+          ? options.extra_workers->ToDebugString().c_str()
+          : "NULL");
 #endif
   RPC* rpc = NULL;
 #if defined(PDLFS_MARGO_RPC)
@@ -196,14 +199,10 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
     rpc = new PosixRPC(options);
   }
   if (rpc == NULL) {
-#ifndef NDEBUG
-    char msg[] = "The requested rpc impl is unavailable\n";
+    char msg[] = "The requested rpc impl is not available\n";
     fwrite(msg, 1, sizeof(msg), stderr);
+    fflush(stderr);
     abort();
-#else
-    Log(Logger::Default(), 0, "No rpc implementation is available");
-    exit(EXIT_FAILURE);
-#endif
   } else {
     return rpc;
   }
