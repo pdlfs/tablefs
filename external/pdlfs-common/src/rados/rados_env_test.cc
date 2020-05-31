@@ -50,7 +50,8 @@ class RadosEnvTest {
     return working_dir_ + "/" + file;
   }
 
-  Status Delete(const std::string& fname) {  // Dir shall be mounted readwrite
+  Status Delete(
+      const std::string& fname) {  // Caller must have the dir mounted readwrite
     return env_->DeleteFile(fname.c_str());
   }
 

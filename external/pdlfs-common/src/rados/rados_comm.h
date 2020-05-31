@@ -13,7 +13,6 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/port.h"
 
 #include <rados/librados.h>

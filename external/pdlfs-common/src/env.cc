@@ -22,7 +22,7 @@
 #include <stdio.h>
 
 #if defined(PDLFS_RADOS)
-#include "rados/rados_connmgr.h"
+#include "pdlfs-common/rados/rados_connmgr.h"
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)

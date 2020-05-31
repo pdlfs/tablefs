@@ -11,9 +11,10 @@
 #pragma once
 
 #include "rados_comm.h"
-#include "rados_connmgr.h"
 
-#include "pdlfs-common/osd.h"
+#include "pdlfs-common/rados/rados_connmgr.h"
+
+#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {
