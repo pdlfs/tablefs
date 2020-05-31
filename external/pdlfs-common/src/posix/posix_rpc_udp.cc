@@ -119,7 +119,10 @@ void PosixUDPServer::HandleIncomingCall(CallState** call) {
     mutex_.Lock();
     ++bg_work_;
     // XXX: senders/callers are implicitly rate-limited by not sending them
-    // replies. Should we more explicitly rate-limit them?
+    // replies. Should we more explicitly rate-limit them? For example, when
+    // bg_work_ is larger than a certain threshold, incoming calls are instantly
+    // rejected with a special reply. This special reply is understood by
+    // PosixUDPCli, which in turn returns a special Status to the caller.
     options_.extra_workers->Schedule(ProcessCallWrapper, *call);
     mutex_.Unlock();
     *call = CreateCallState();

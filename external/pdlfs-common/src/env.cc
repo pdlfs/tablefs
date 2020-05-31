@@ -16,15 +16,13 @@
  */
 #include "pdlfs-common/env.h"
 
-#include "pdlfs-common/env_files.h"
-#include "pdlfs-common/env_lazy.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 
 #include <stdio.h>
 
 #if defined(PDLFS_RADOS)
-#include "pdlfs-common/rados/rados_ld.h"
+#include "rados/rados_connmgr.h"
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
@@ -63,31 +61,17 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   if (name == NULL) name = "";
   if (conf == NULL) conf = "";
   Slice env_name(name), env_conf(conf);
-#if VERBOSE >= 1
-  const char* env_name_str = env_name.c_str();
-  if (env_name.empty()) {
-    env_name_str = "~";
-  }
-  const char* env_conf_str = env_conf.c_str();
-  if (env_conf.empty()) {
-    env_conf_str = "~";
-  }
-  // Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
-  // Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
-#endif
-// RADOS
 #if defined(PDLFS_RADOS)
   if (env_name == "rados") {
-    return (Env*)PDLFS_Load_rados_env(env_conf.c_str());
+    return NULL;  // XXX: impl this
   }
 #endif
   if (env_name == "unbufferedio") {
     *is_system = true;
     return Env::GetUnBufferedIoEnv();
   }
-  if (env_name.empty()) {
-    // Warn(__LOG_ARGS__, "Open env without specifying a name...");
-  }
+  if (env_name.empty())
+    fprintf(stderr, "Open env without specifying a name...\n");
   if (env_name.empty() || env_name == "default") {
     *is_system = true;
     Env* env = Env::Default();

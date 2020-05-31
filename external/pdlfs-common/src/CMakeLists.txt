@@ -90,9 +90,10 @@ endif ()
 
 # Add rados srcs if user has requested it and rados is found
 if (TARGET rados AND PDLFS_RADOS)
-    set (pdlfs-rados-srcs rados_common.cc rados_conn.cc rados_env.cc
-         rados_fio.cc rados_ld.cc rados_osd.cc)
-    set (pdlfs-rados-tests rados_env_test.cc rados_fio_test.cc)
+    set (pdlfs-rados-srcs rados_comm.cc rados_connmgr.cc
+            rados_db_env.cc rados_env.cc rados_osd.cc)
+    set (pdlfs-rados-tests rados_connmgr_test.cc rados_db_env_test
+            rados_env_test rados_osd_test)
 endif ()
 
 
