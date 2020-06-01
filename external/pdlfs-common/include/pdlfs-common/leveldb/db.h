@@ -202,8 +202,8 @@ class DB {
   DB(const DB&);
 };
 
-// Destroy the contents of the specified database.
-// Be very careful using this method.
+// Destroy the contents of the specified database. Be very careful using this
+// method. If options.env is NULL, Env::Default() will be used.
 Status DestroyDB(const std::string& dbname, const DBOptions& options);
 
 // If a DB cannot be opened, you may attempt to call this method to
