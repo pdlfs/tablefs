@@ -174,12 +174,12 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   if (!options.env) {
     options.env = Env::Default();
   }
-#if VERBOSE >= 1
-  Log(options.info_log, 1, "rpc.uri -> %s", options.uri.c_str());
-  Log(options.info_log, 1, "rpc.timeout -> %llu (microseconds)",
+#if VERBOSE >= 3
+  Log(options.info_log, 3, "rpc.uri -> %s", options.uri.c_str());
+  Log(options.info_log, 3, "rpc.timeout -> %llu (microseconds)",
       static_cast<unsigned long long>(options.rpc_timeout));
-  Log(options.info_log, 1, "rpc.num_io_threads -> %d", options.num_rpc_threads);
-  Log(options.info_log, 1, "rpc.extra_workers -> [%s]",
+  Log(options.info_log, 3, "rpc.num_io_threads -> %d", options.num_rpc_threads);
+  Log(options.info_log, 3, "rpc.extra_workers -> [%s]",
       options.extra_workers != NULL
           ? options.extra_workers->ToDebugString().c_str()
           : "NULL");
