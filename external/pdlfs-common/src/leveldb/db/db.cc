@@ -56,7 +56,7 @@ Status DestroyDB(const std::string& dbname, const DBOptions& options) {
   }
 
   std::string lockname = LockFileName(dbname);
-  FileLock* lock;
+  FileLock* lock = NULL;
   Status result;
   if (!options.skip_lock_file) {
     result = env->LockFile(lockname.c_str(), &lock);
@@ -76,9 +76,10 @@ Status DestroyDB(const std::string& dbname, const DBOptions& options) {
     }
 
     // Ignore error since state is already gone
-    env->UnlockFile(lock);
+    if (lock) {
+      env->UnlockFile(lock);
+    }
     env->DeleteFile(lockname.c_str());
-
     // Ignore error in case dir contains other files
     env->DeleteDir(dbname.c_str());
   }
