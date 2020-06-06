@@ -27,6 +27,10 @@ PosixServerUDPSocket::PosixServerUDPSocket() : fd_(-1) {}
 
 PosixUDPSocket::PosixUDPSocket() : fd_(-1) {}
 
+ServerUDPSocket* CreateServerUDPSocket() { return new PosixServerUDPSocket(); }
+
+UDPSocket* CreateUDPSocket() { return new PosixUDPSocket(); }
+
 // Return errors as status objects.
 extern Status PosixError(const Slice& err_context, int err_number);
 

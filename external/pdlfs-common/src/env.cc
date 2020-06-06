@@ -16,8 +16,7 @@
  */
 #include "pdlfs-common/env.h"
 
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/port.h"
+#include "pdlfs-common/port.h"  // Also includes pdlfs_config.h
 
 #include <stdio.h>
 
@@ -26,7 +25,6 @@
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix/posix_env.h"
 #include "posix/posix_logger.h"
 #endif
 
@@ -75,7 +73,7 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
     return Env::GetUnBufferedIoEnv();
   }
   if (env_name.empty())
-    fprintf(stderr, "Open env without specifying a name...\n");
+    fprintf(stderr, "Warning: open env without specifying a name...\n");
   if (env_name.empty() || env_name == "default") {
     *is_system = true;
     Env* env = Env::Default();
@@ -85,8 +83,9 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   }
 }
 
-static Status DoWriteStringToFile(Env* env, const Slice& data,
-                                  const char* fname, bool should_sync) {
+namespace {
+Status DoWriteStringToFile(Env* env, const Slice& data, const char* fname,
+                           bool should_sync) {
   WritableFile* file;
   Status s = env->NewWritableFile(fname, &file);
   if (!s.ok()) {
@@ -105,6 +104,7 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
   }
   return s;
 }
+}  // namespace
 
 Status WriteStringToFile(Env* env, const Slice& data, const char* fname) {
   return DoWriteStringToFile(env, data, fname, false);
@@ -225,7 +225,7 @@ void Log0v(Logger* logger, const char* srcfile, int srcln, int loglvl,
 }
 
 Logger* Logger::Default() {
-#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)
+#if defined(PDLFS_GLOG)
   static PosixGoogleLogger logger;
   return &logger;
 #elif defined(PDLFS_PLATFORM_POSIX)

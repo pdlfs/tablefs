@@ -366,6 +366,14 @@ class UDPSocket {
   UDPSocket(const UDPSocket&);
 };
 
+// Return a new server-side UDP socket. The returned socket shall be deleted
+// when it is no longer needed.
+extern ServerUDPSocket* CreateServerUDPSocket();
+
+// Return a new UDP socket. The returned socket shall be deleted when it is no
+// longer needed.
+extern UDPSocket* CreateUDPSocket();
+
 // A utility routine: read contents of named file into *data
 extern Status ReadFileToString(Env* env, const char* fname, std::string* data);
 
