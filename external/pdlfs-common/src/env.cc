@@ -52,6 +52,10 @@ Logger::~Logger() {}
 
 FileLock::~FileLock() {}
 
+ServerUDPSocket::~ServerUDPSocket() {}
+
+UDPSocket::~UDPSocket() {}
+
 ThreadPool::~ThreadPool() {}
 
 EnvWrapper::~EnvWrapper() {}

@@ -10,6 +10,8 @@
  */
 #pragma once
 
+#include "posix_net.h"
+
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 
@@ -17,41 +19,6 @@
 #include <stdlib.h>
 
 namespace pdlfs {
-
-// A simple wrapper class over struct sockaddr_in.
-class PosixSocketAddr {
- public:
-  PosixSocketAddr() { Reset(); }
-  void Reset();
-  // The returned uri may not be used for clients to connect to the address.
-  // While both the address and the port will be numeric, the address may be
-  // "0.0.0.0" and the port may be "0".
-  std::string GetUri() const;
-  Status ResolvUri(const std::string& uri);
-  const struct sockaddr_in* rep() const { return &addr_; }
-  struct sockaddr_in* rep() {
-    return &addr_;
-  }
-
- private:
-  void SetPort(const char* p) {
-    int port = -1;
-    if (p && p[0]) port = atoi(p);
-    if (port < 0) {
-      // Have the OS pick up a port for us
-      port = 0;
-    }
-    addr_.sin_port = htons(port);
-  }
-  // Translate a human-readable host name into a binary internet address to
-  // which we can bind or connect. Return OK on success, or a non-OK status on
-  // errors.
-  Status Resolv(const char* host, bool is_numeric);
-  struct sockaddr_in addr_;
-
-  // Copyable
-};
-
 // Base RPC impl providing infrastructure for background progressing. To be
 // extended by subclasses.
 class PosixSocketServer {
