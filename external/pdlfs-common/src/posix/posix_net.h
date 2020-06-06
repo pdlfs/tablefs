@@ -29,6 +29,7 @@ class PosixSocketAddr {
   // "0.0.0.0" and the port may be "0".
   std::string GetUri() const;
   Status ResolvUri(const std::string& uri);
+  int GetPort() const { return ntohs(addr_.sin_port); }
   const struct sockaddr_in* rep() const { return &addr_; }
   struct sockaddr_in* rep() {
     return &addr_;

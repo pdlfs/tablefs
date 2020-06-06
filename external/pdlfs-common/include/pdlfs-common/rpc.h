@@ -105,7 +105,12 @@ class RPC {
   // without requiring explicit synchronization at the caller side.
   static RPC* Open(const RPCOptions& rpcopts);
 
-  // Return uri of the server.
+  // Return the port number associated with the server or -1 when such
+  // information is unavailable based on the implementation, type, or mode of
+  // the rpc instance.
+  virtual int GetPort() = 0;
+
+  // Return uri of the server or "-1:-1" when unavailable.
   virtual std::string GetUri() = 0;
 
   // Connect or bind to a remote peer and return a stub for RPC communications.

@@ -31,8 +31,9 @@ class PosixSocketServer {
   Status BGStart(Env* env, int num_threads);
   Status BGStop();
 
-  // Return base uri of the server. A base uri does not contain protocol
-  // information.
+  int GetPort();  // Return server port.
+  // Return base uri of the server. Unlike a full uri, a base uri is not coupled
+  // with a protocol (tcp, udp).
   std::string GetBaseUri();
   Status status();
 
@@ -69,6 +70,7 @@ class PosixRPC : public RPC {
   virtual Status Start();  // Open server the start background progressing
   virtual Status Stop();
 
+  virtual int GetPort();
   virtual std::string GetUri();
   virtual Status status();
 

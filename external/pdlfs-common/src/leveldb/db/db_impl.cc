@@ -788,8 +788,8 @@ void DBImpl::BackgroundCompaction() {
     if (c != NULL) {
       manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
     }
-#if VERBOSE >= 1
-    Log(options_.info_log, 1,
+#if VERBOSE >= 4
+    Log(options_.info_log, 4,
         "Manual compaction at level-%d from %s .. %s; will stop at %s",
         m->level, (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
         (m->end ? m->end->DebugString().c_str() : "(end)"),
