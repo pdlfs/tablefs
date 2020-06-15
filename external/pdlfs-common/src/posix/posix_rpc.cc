@@ -73,7 +73,7 @@ void PosixSocketServer::BGCall() {
   if (r != 0) {
     Log(options_.info_log, 0, "Cannot get thread rusage: %s", strerror(errno));
   } else {
-    BGUsageInfo* info = &bg_usage_[bg_id_];
+    BGUsageInfo* info = &bg_usage_[myid];
     info->system = TimevalToDouble(&usage.ru_stime) -
                    TimevalToDouble(&start_usage.ru_stime);
     info->user = TimevalToDouble(&usage.ru_utime) -
