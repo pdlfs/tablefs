@@ -55,6 +55,8 @@ TEST(RPCTest, Open) {
     ASSERT_TRUE(rpc != NULL);
     ASSERT_OK(rpc->Start());
     ASSERT_OK(rpc->Stop());
+    std::string usage_info = rpc->GetUsageInfo();
+    fprintf(stderr, "%s\n", usage_info.c_str());
     delete rpc;
   }
 }

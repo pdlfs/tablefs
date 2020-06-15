@@ -113,6 +113,9 @@ class RPC {
   // Return uri of the server or "-1:-1" when unavailable.
   virtual std::string GetUri() = 0;
 
+  // Return thread usage info.
+  virtual std::string GetUsageInfo() = 0;
+
   // Connect or bind to a remote peer and return a stub for RPC communications.
   // The returned result should be deleted when it is no longer needed.
   virtual rpc::If* OpenStubFor(const std::string& uri) = 0;

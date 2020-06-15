@@ -221,18 +221,33 @@ class Version::LevelFileNumIterator : public Iterator {
   mutable char value_buf_[24];
 };
 
-static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
-                                 const Slice& file_value) {
+namespace {
+Iterator* GetPrefetchedFileIterator(void* arg, const ReadOptions& options,
+                                    const Slice& file_value) {
   TableCache* cache = reinterpret_cast<TableCache*>(arg);
   if (file_value.size() != 24) {
     return NewErrorIterator(
-        Status::Corruption("FileReader invoked with unexpected value"));
+        Status::Corruption("Bad file_num/file_size/seq_off encoding"));
   } else {
-    return cache->NewIterator(options, DecodeFixed64(file_value.data()),
-                              DecodeFixed64(file_value.data() + 8),
-                              DecodeFixed64(file_value.data() + 16));
+    return cache->NewDirectIterator(  ///
+        options, true, DecodeFixed64(&file_value[0]),
+        DecodeFixed64(&file_value[8]), DecodeFixed64(&file_value[16]));
   }
 }
+
+Iterator* GetFileIterator(void* arg, const ReadOptions& options,
+                          const Slice& file_value) {
+  TableCache* cache = reinterpret_cast<TableCache*>(arg);
+  if (file_value.size() != 24) {
+    return NewErrorIterator(
+        Status::Corruption("Bad file_num/file_size/seq_off encoding"));
+  } else {
+    return cache->NewIterator(  ///
+        options, DecodeFixed64(&file_value[0]), DecodeFixed64(&file_value[8]),
+        DecodeFixed64(&file_value[16]));
+  }
+}
+}  // namespace
 
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
                                             int level) const {
@@ -1367,9 +1382,9 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   options.verify_checksums = options_->paranoid_checks;
   options.fill_cache = false;
 
-  // Level-0 files have to be merged together.  For other levels,
-  // we will make a concatenating iterator per level.
-  // TODO(opt): use concatenating iterator for level-0 if there is no overlap
+  // Level-0 files have to be merged together. For other levels, we will make a
+  // concatenating iterator per level.
+  // XXX: use concatenating iterator for level-0 if there is no overlap
   const int space = (c->level() == 0 ? c->inputs_[0].size() + 1 : 2);
   Iterator** list = new Iterator*[space];
   int num = 0;
@@ -1378,15 +1393,26 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
       if (c->level() + which == 0) {
         const std::vector<FileMetaData*>& files = c->inputs_[which];
         for (size_t i = 0; i < files.size(); i++) {
-          list[num++] =
-              table_cache_->NewIterator(options, files[i]->number,
-                                        files[i]->file_size, files[i]->seq_off);
+          if (!options_->prefetch_compaction_input) {
+            list[num++] = table_cache_->NewIterator(options, files[i]->number,
+                                                    files[i]->file_size,
+                                                    files[i]->seq_off);
+          } else {
+            list[num++] = table_cache_->NewDirectIterator(
+                options, true, files[i]->number, files[i]->file_size,
+                files[i]->seq_off);
+          }
         }
-      } else {
-        // Create concatenating iterator for the files from this level
-        list[num++] = NewTwoLevelIterator(
-            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
-            &GetFileIterator, table_cache_, options);
+      } else {  // Create concatenating iterator for the files from this level
+        if (!options_->prefetch_compaction_input) {
+          list[num++] = NewTwoLevelIterator(
+              new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
+              &GetFileIterator, table_cache_, options);
+        } else {
+          list[num++] = NewTwoLevelIterator(
+              new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
+              &GetPrefetchedFileIterator, table_cache_, options);
+        }
       }
     }
   }

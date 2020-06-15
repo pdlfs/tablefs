@@ -196,7 +196,20 @@ struct DBOptions {
   // Default: false
   bool disable_seek_compaction;
 
-  // The targeted size of each Table file before compression.
+  // Do not verify table by immediately opening it after it is built.
+  // Default: false
+  bool table_builder_skip_verification;
+
+  // Bulk read an entire table on table opening during compaction instead of
+  // dynamically reading table blocks using random file access.
+  // Default: false
+  bool prefetch_compaction_input;
+
+  // Read size for bulk reading an table in its entirety.
+  // Default: 256KB
+  size_t table_bulk_read_size;
+
+  // Target table file size before data compression is applied.
   // Default: 2MB
   size_t table_file_size;
 

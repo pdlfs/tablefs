@@ -42,6 +42,8 @@ RPCOptions::RPCOptions()
 
 int RPC::GetPort() { return -1; }
 
+std::string RPC::GetUsageInfo() { return ""; }
+
 std::string RPC::GetUri() { return std::string("-1:-1"); }
 
 Status RPC::status() { return Status::OK(); }
@@ -141,8 +143,9 @@ class MercuryRPCImpl : public RPC {
   MercuryRPC* rpc_;
 
  public:
-  virtual int GetPort() { return -1; }
-  virtual std::string GetUri() { return std::string("-1:-1"); }
+  virtual int GetPort() { return RPC::GetPort(); }
+  virtual std::string GetUsageInfo() { return RPC::GetUsageInfo(); }
+  virtual std::string GetUri() { return RPC::GetUri(); }
   virtual Status status() { return rpc_->status(); }
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }

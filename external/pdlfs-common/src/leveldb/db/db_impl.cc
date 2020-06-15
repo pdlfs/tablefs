@@ -943,12 +943,14 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->outfile = NULL;
 
   if (s.ok() && current_entries > 0) {
-    const SequenceOff off = 0;
-    // Verify that the table is usable
-    Iterator* iter = table_cache_->NewIterator(ReadOptions(), output_number,
-                                               current_bytes, off);
-    s = iter->status();
-    delete iter;
+    if (!options_.table_builder_skip_verification) {
+      const SequenceOff off = 0;
+      // Verify that the table is usable
+      Iterator* iter = table_cache_->NewIterator(ReadOptions(), output_number,
+                                                 current_bytes, off);
+      s = iter->status();
+      delete iter;
+    }
 #if VERBOSE >= 2
     if (s.ok()) {
       Log(options_.info_log, 2, "L%d table #%llu => %llu keys, %llu bytes",
