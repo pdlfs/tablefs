@@ -213,6 +213,14 @@ struct DBOptions {
   // Default: 2MB
   size_t table_file_size;
 
+  // Maximum level to which a new compacted memtable is pushed if it does not
+  // create overlap.
+  // Default: 2; we try to push to level 2 to avoid relatively expensive level
+  // 0=>1 compactions and to reduce expensive manifest file operations. We do
+  // not push all the way to the largest level since that can generate a lot of
+  // wasted disk space if the same key space is being repeatedly overwritten.
+  int max_mem_compact_level;
+
   // The size ratio between two consecutive levels.
   // Default: 10
   int level_factor;

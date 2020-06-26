@@ -156,7 +156,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
-  Log(options_.info_log, 0, "Shutting down ...");
+#if VERBOSE >= 1
+  Log(options_.info_log, 1, "Shutting down ...");
+#endif
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
   while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
@@ -209,7 +211,9 @@ Status DBImpl::NewDB() {
   }
   delete file;
   if (s.ok()) {
-    Log(options_.info_log, 0, "Started a new db");
+#if VERBOSE >= 1
+    Log(options_.info_log, 1, "Started a new db");
+#endif
     if (!options_.rotating_manifest) {
       // Make "CURRENT" file that points to the new manifest file.
       s = SetCurrentFile(env_, dbname_, num);

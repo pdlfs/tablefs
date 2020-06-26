@@ -52,6 +52,7 @@ DBOptions::DBOptions()
       prefetch_compaction_input(false),
       table_bulk_read_size(256 * 1024),
       table_file_size(2 * 1048576),
+      max_mem_compact_level(2),
       level_factor(10),
       l1_compaction_trigger(5),
       l0_compaction_trigger(4),
