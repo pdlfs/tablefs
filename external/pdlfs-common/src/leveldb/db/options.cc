@@ -29,6 +29,7 @@ DBOptions::DBOptions()
     : comparator(BytewiseComparator()),
       create_if_missing(false),
       error_if_exists(false),
+      detach_dir_on_close(false),
       paranoid_checks(false),
       env(Env::Default()),
       info_log(NULL),
@@ -45,6 +46,7 @@ DBOptions::DBOptions()
       gc_skip_deletion(false),
       skip_lock_file(false),
       rotating_manifest(false),
+      sync_log_on_close(false),
       disable_write_ahead_log(false),
       disable_compaction(false),
       disable_seek_compaction(false),
@@ -73,6 +75,8 @@ InsertOptions::InsertOptions()
     : no_seq_adjustment(false),
       suggested_max_seq(0),
       verify_checksums(false),
+      attach_dir_on_start(false),
+      detach_dir_on_complete(false),
       method(kRename) {}
 
 DumpOptions::DumpOptions() : verify_checksums(false), snapshot(NULL) {}

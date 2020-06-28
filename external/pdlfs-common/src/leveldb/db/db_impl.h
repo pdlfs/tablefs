@@ -125,11 +125,9 @@ class DBImpl : public DB {
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
   // Errors are recorded in bg_error_.
-  //
-  // Subclasses may override the compaction process.
-  virtual void CompactMemTable();
-  virtual Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
-                                SequenceNumber* max_sequence);
+  void CompactMemTable();
+  Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
+                        SequenceNumber* max_sequence);
 
   Status DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base);
   Status WriteLevel0Table(Iterator* iter, VersionEdit* edit, Version* base,

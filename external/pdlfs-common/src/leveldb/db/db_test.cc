@@ -1045,6 +1045,30 @@ TEST(DBTest, NoLog) {
   ASSERT_EQ("NOT_FOUND", Get("baz"));
 }
 
+TEST(DBTest, NoLogWithoutDataLoss) {
+  Options options = CurrentOptions();
+  options.disable_write_ahead_log = true;
+  Reopen(&options);
+
+  ASSERT_OK(Put("foo", "v1"));
+  ASSERT_OK(Put("baz", "v5"));
+  ASSERT_OK(dbfull()->TEST_CompactMemTable());
+
+  Reopen(&options);
+  ASSERT_EQ("v1", Get("foo"));
+  ASSERT_EQ("v5", Get("baz"));
+  ASSERT_OK(Put("bar", "v2"));
+  ASSERT_OK(Put("foo", "v3"));
+  ASSERT_OK(dbfull()->TEST_CompactMemTable());
+
+  Reopen();
+  ASSERT_EQ("v3", Get("foo"));
+  ASSERT_OK(Put("foo", "v4"));
+  ASSERT_EQ("v4", Get("foo"));
+  ASSERT_EQ("v2", Get("bar"));
+  ASSERT_EQ("v5", Get("baz"));
+}
+
 TEST(DBTest, NoCompaction) {
   Options options = CurrentOptions();
   options.disable_compaction = true;

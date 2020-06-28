@@ -10,11 +10,13 @@
  */
 
 #include "readonly_impl.h"
-#include "../merger.h"
+
 #include "db_impl.h"
 #include "db_iter.h"
 #include "table_cache.h"
 #include "version_set.h"
+
+#include "../merger.h"
 
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/snapshot.h"
@@ -53,7 +55,9 @@ ReadonlyDBImpl::~ReadonlyDBImpl() {
   if (owns_cache_) delete options_.block_cache;
   if (owns_table_cache_) delete options_.table_cache;
 
-  env_->DetachDir(dbname_.c_str());
+  if (options_.detach_dir_on_close) {
+    env_->DetachDir(dbname_.c_str());
+  }
 }
 
 Status ReadonlyDBImpl::Load() {

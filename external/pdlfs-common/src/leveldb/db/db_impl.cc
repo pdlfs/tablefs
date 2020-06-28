@@ -168,7 +168,12 @@ DBImpl::~DBImpl() {
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
-  delete log_;
+  if (log_ != NULL) {
+    if (options_.sync_log_on_close) {
+      log_->Sync();
+    }
+    delete log_;
+  }
   delete logfile_;
   delete table_cache_;
 
@@ -181,7 +186,9 @@ DBImpl::~DBImpl() {
   }
 
   // Detach db directory so other processes may mount the db.
-  env_->DetachDir(dbname_.c_str());
+  if (options_.detach_dir_on_close) {
+    env_->DetachDir(dbname_.c_str());
+  }
 }
 
 Status DBImpl::NewDB() {
@@ -378,13 +385,13 @@ Status DBImpl::Recover(VersionEdit* edit) {
   if (s.ok()) {
     SequenceNumber max_sequence(0);
 
-    // Recover from all newer log files than the ones named in the
-    // descriptor (new log files may have been added by the previous
-    // incarnation without registering them in the descriptor).
+    // Recover from all newer log files than the ones named in the descriptor
+    // (new log files may have been added by the previous incarnation without
+    // registering them in the descriptor).
     //
-    // Note that PrevLogNumber() is no longer used, but we pay
-    // attention to it in case we are recovering a database
-    // produced by an older version of leveldb.
+    // Note that PrevLogNumber() is no longer used, but we pay attention to it
+    // in case we are recovering a database produced by an older version of
+    // leveldb.
     const uint64_t min_log = versions_->LogNumber();
     const uint64_t prev_log = versions_->PrevLogNumber();
     std::vector<std::string> filenames;
@@ -469,13 +476,13 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   reporter.info_log = options_.info_log;
   reporter.fname = fname.c_str();
   reporter.status = (options_.paranoid_checks ? &status : NULL);
-  // We intentionally make log::Reader do checksumming even if
-  // paranoid_checks==false so that corruptions cause entire commits
-  // to be skipped instead of propagating bad information (like overly
-  // large sequence numbers).
+  // We intentionally have log::Reader do checksumming even when paranoid_checks
+  // is set to false in order that corruptions cause entire commits to be
+  // skipped instead of propagating bad information (like overly large sequence
+  // numbers).
   log::Reader reader(file, &reporter, true /*checksum*/, 0 /*initial_offset*/);
 #if VERBOSE >= 1
-  Log(options_.info_log, 1, "Recovering log: %s", fname.c_str());
+  Log(options_.info_log, 1, "Recovering log to memtable: %s", fname.c_str());
 #endif
 
   // Read all the records and add to a memtable
@@ -542,8 +549,9 @@ Status DBImpl::DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base) {
   return s;
 }
 
-// REQUIRES: mutex_ has been locked. May insert table into deeper levels when
-// *base is given. Otherwise, will directly insert into Level 0.
+// REQUIRES: mutex_ has been locked. Will attempt to insert table into deeper
+// levels (limited by options_.max_mem_compact_level) when *base is given.
+// Otherwise, will directly insert table into Level 0.
 Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                                 Version* base, SequenceNumber* min_seq,
                                 SequenceNumber* max_seq) {
@@ -603,7 +611,7 @@ void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != NULL);
 
-  // Save the contents of the memtable as a new Table
+  // Save memtable contents into a new table file
   VersionEdit edit;
   Version* base = versions_->current();
   base->Ref();
@@ -614,10 +622,19 @@ void DBImpl::CompactMemTable() {
     s = Status::IOError("Deleting db during memtable compaction");
   }
 
-  // Replace immutable memtable with the generated Table
+  // Replace the memtable we just compacted with the newly generated table by
+  // recording the current log number (logfile_number_) in the new version; logs
+  // earlier than that (including the one backing the memtable we just
+  // compacted) are no longer needed (and will be garbage collected).
+  //
+  // Note that the recoding of a previous log number is no longer used. So we
+  // simply set it to 0.
   if (s.ok()) {
-    edit.SetPrevLogNumber(0);
-    edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
+    // Do not record any log changes if we didn't write any logs.
+    if (!options_.disable_write_ahead_log) {
+      edit.SetPrevLogNumber(0);
+      edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
+    }
     s = versions_->LogAndApply(&edit, &mutex_);
   }
 
@@ -693,7 +710,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
 }
 
 Status DBImpl::TEST_CompactMemTable() {
-  // NULL batch means just wait for earlier writes to be done
+  // NULL batch simply means waiting for earlier writes to complete
   Status s = Write(WriteOptions(), NULL);
   if (s.ok()) {
     // Wait until the compaction completes
@@ -1620,6 +1637,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
           versions_->ReuseFileNumber(new_log_number);
           break;
         }
+        if (options_.sync_log_on_close) {
+          log_->Sync();
+        }
         delete log_;
         delete logfile_;  // This closes the file
         logfile_ = file;
@@ -1994,28 +2014,37 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   Status s;
   InsertionState insert(options, bulk_dir);
   std::vector<std::string>* const names = &insert.source_names;
+  if (options.attach_dir_on_start) {
+    // Ignore error since we may have already mounted the directory
+    env_->AttachDir(bulk_dir.c_str());
+  }
   s = env_->GetChildren(bulk_dir.c_str(), names);
   if (!s.ok()) {
     return s;
   }
 
   std::sort(names->begin(), names->end());
+  {
+    MutexLock l(&mutex_);
+    // Temporarily disable any background compaction
+    bg_compaction_paused_++;
+    while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+      bg_cv_.Wait();
+    }
 
-  MutexLock l(&mutex_);
-  // Temporarily disable any background compaction
-  bg_compaction_paused_++;
-  while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
-    bg_cv_.Wait();
+    bulk_insert_in_progress_ = true;
+    s = InsertLevel0Tables(&insert);
+    bulk_insert_in_progress_ = false;
+    // Restart background compaction
+    assert(bg_compaction_paused_ > 0);
+    bg_compaction_paused_--;
+    MaybeScheduleCompaction();
+    bg_cv_.SignalAll();
   }
 
-  bulk_insert_in_progress_ = true;
-  s = InsertLevel0Tables(&insert);
-  bulk_insert_in_progress_ = false;
-  // Restart background compaction
-  assert(bg_compaction_paused_ > 0);
-  bg_compaction_paused_--;
-  MaybeScheduleCompaction();
-  bg_cv_.SignalAll();
+  if (options.detach_dir_on_complete) {
+    env_->DetachDir(bulk_dir.c_str());
+  }
   return s;
 }
 
