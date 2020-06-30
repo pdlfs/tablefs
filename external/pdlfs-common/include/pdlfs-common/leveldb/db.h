@@ -183,14 +183,15 @@ class DB {
   // Return OK on success, or a non-OK status on errors.
   // REQUIRES: one or more FreezeCompaction() calls must have been called
   // before.
-  virtual Status ResumeCompaction() = 0;
+  virtual Status ResumeDbCompaction() = 0;
 
   // Dynamically pause background db compaction. If multiple FreezeCompaction()
   // calls have been made, the same amount of ResumeCompaction() calls must be
   // made to resume compaction. This call does not stop the current compaction
-  // from making progress. Nor does it wait for it to complete.
+  // from making progress. Nor does it wait for it to complete. Memtable dumps
+  // and manual compactions are not effected by this call.
   // Return OK on success, or a non-OK status on errors.
-  virtual Status FreezeCompaction() = 0;
+  virtual Status FreezeDbCompaction() = 0;
 
   // Keep scheduling compactions until no compaction is needed.
   // Wait for all compactions to finish.

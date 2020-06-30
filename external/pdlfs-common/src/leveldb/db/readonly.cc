@@ -21,9 +21,9 @@ void ReadonlyDB::CompactRange(const Slice* begin, const Slice* end) {}
 
 Status ReadonlyDB::DrainCompactions() { return Status::OK(); }
 
-Status ReadonlyDB::FreezeCompaction() { return Status::OK(); }
+Status ReadonlyDB::FreezeDbCompaction() { return Status::OK(); }
 
-Status ReadonlyDB::ResumeCompaction() { return Status::OK(); }
+Status ReadonlyDB::ResumeDbCompaction() { return Status::OK(); }
 
 Status ReadonlyDB::FlushMemTable(const FlushOptions&) {
   return Status::ReadOnly(Slice());

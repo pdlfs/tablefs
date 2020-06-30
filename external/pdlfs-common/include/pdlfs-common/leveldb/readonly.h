@@ -39,8 +39,8 @@ class ReadonlyDB : public DB {
   virtual Status Write(const WriteOptions&, WriteBatch* updates);
   virtual Status AddL0Tables(const InsertOptions&, const std::string& dir);
   virtual void CompactRange(const Slice* begin, const Slice* end);
-  virtual Status ResumeCompaction();
-  virtual Status FreezeCompaction();
+  virtual Status ResumeDbCompaction();
+  virtual Status FreezeDbCompaction();
   virtual Status DrainCompactions();
 
   // Load an existing db image produced by another db.

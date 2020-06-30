@@ -71,8 +71,8 @@ class DBImpl : public DB {
                       const std::string& dir, SequenceNumber* min_seq,
                       SequenceNumber* max_seq);
   // Compaction control interface
-  virtual Status ResumeCompaction();  // Dynamically resume bg compaction
-  virtual Status FreezeCompaction();  // Dynamically pause compaction
+  virtual Status ResumeDbCompaction();  // Dynamically resume bg compaction
+  virtual Status FreezeDbCompaction();  // Dynamically pause compaction
   virtual Status DrainCompactions();
 
   // Extra methods that are not in the public DB interface
@@ -203,8 +203,11 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-  // If not zero, will temporarily stop background compactions
+  // If not zero, will temporarily block all background compactions except
+  // memtable dumps and manual compactions
   unsigned int bg_compaction_paused_;
+  // If not zero, will temporarily block all background compactions
+  unsigned int bg_compaction_paused_all_;
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   // Has an outstanding bulk insertion request?
