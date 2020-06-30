@@ -192,6 +192,9 @@ DBImpl::~DBImpl() {
 }
 
 Status DBImpl::NewDB() {
+#if VERBOSE >= 2
+  Log(options_.info_log, 2, "Need to format a new db!");
+#endif
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
   new_db.SetLogNumber(0);
@@ -217,10 +220,11 @@ Status DBImpl::NewDB() {
     }
   }
   delete file;
-  if (s.ok()) {
-#if VERBOSE >= 1
-    Log(options_.info_log, 1, "Started a new db");
+#if VERBOSE >= 2
+  Log(options_.info_log, 2, "Writing %s: %s", manifest.c_str(),
+      s.ToString().c_str());
 #endif
+  if (s.ok()) {
     if (!options_.rotating_manifest) {
       // Make "CURRENT" file that points to the new manifest file.
       s = SetCurrentFile(env_, dbname_, num);
@@ -256,6 +260,22 @@ Status DBImpl::FlushMemTable(const FlushOptions& options) {
     }
   }
   return s;
+}
+
+Status DBImpl::FreezeCompaction() {
+  MutexLock l(&mutex_);
+  bg_compaction_paused_++;
+  return Status::OK();
+}
+
+Status DBImpl::ResumeCompaction() {
+  MutexLock l(&mutex_);
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
+  if (bg_compaction_paused_ == 0) {
+    MaybeScheduleCompaction();
+  }
+  return Status::OK();
 }
 
 Status DBImpl::DrainCompactions() {
@@ -373,11 +393,12 @@ Status DBImpl::Recover(VersionEdit* edit) {
         return s;
       }
     } else {
-      return Status::InvalidArgument(dbname_, "does not exist");
+      return Status::InvalidArgument(
+          "db does not exist (create_if_missing==0)");
     }
   } else {
     if (options_.error_if_exists) {
-      return Status::InvalidArgument(dbname_, "exists");
+      return Status::InvalidArgument("db exists (error_if_exists==1)");
     }
   }
 
@@ -482,7 +503,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   // numbers).
   log::Reader reader(file, &reporter, true /*checksum*/, 0 /*initial_offset*/);
 #if VERBOSE >= 1
-  Log(options_.info_log, 1, "Recovering log to memtable: %s", fname.c_str());
+  Log(options_.info_log, 1, "Recovering log into memtable: %s", fname.c_str());
 #endif
 
   // Read all the records and add to a memtable
@@ -646,7 +667,7 @@ void DBImpl::CompactMemTable() {
     DeleteObsoleteFiles();
 #if VERBOSE >= 1
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, 1, "Compaction done: RAM->L0, db => %s",
+    Log(options_.info_log, 1, "Compaction done: LM->L0, db => %s",
         versions_->LevelSummary(&tmp));
 #endif
   } else {
@@ -2153,6 +2174,9 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   *dbptr = NULL;
 
   DBImpl* impl = new DBImpl(options, dbname);
+#if VERBOSE >= 1
+  Log(options.info_log, 1, "Opening db at %s ...", dbname.c_str());
+#endif
   impl->mutex_.Lock();
   VersionEdit edit;
   Status s =

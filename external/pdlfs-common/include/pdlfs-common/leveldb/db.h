@@ -177,6 +177,21 @@ class DB {
   // Return OK on success, or a non-OK status on errors.
   virtual Status SyncWAL() = 0;
 
+  // Resume background db compaction. No effect when
+  // DBOptions().disable_compaction has been set to true. Undefined when no
+  // FreezeCompaction() calls have been made before.
+  // Return OK on success, or a non-OK status on errors.
+  // REQUIRES: one or more FreezeCompaction() calls must have been called
+  // before.
+  virtual Status ResumeCompaction() = 0;
+
+  // Dynamically pause background db compaction. If multiple FreezeCompaction()
+  // calls have been made, the same amount of ResumeCompaction() calls must be
+  // made to resume compaction. This call does not stop the current compaction
+  // from making progress. Nor does it wait for it to complete.
+  // Return OK on success, or a non-OK status on errors.
+  virtual Status FreezeCompaction() = 0;
+
   // Keep scheduling compactions until no compaction is needed.
   // Wait for all compactions to finish.
   // REQUIRES: db must remain active during this operation.

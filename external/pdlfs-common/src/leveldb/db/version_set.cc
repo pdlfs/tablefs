@@ -918,6 +918,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       descriptor_log_ = new log::Writer(descriptor_file_);
       s = WriteSnapshot(descriptor_log_);
     }
+#if VERBOSE >= 2
+    Log(options_->info_log, 2, "Writing %s: %s", new_manifest_file.c_str(),
+        s.ToString().c_str());
+#endif
   }
 
   // Unlock during expensive MANIFEST log write
@@ -1053,7 +1057,10 @@ Status VersionSet::Recover() {
         uint64_t log_number = 0;
         uint64_t prev_log_number = 0;
         Builder* builder = new Builder(this, current);
-
+#if VERBOSE >= 1
+        Log(options_->info_log, 1, "Restoring db from %s",
+            manifests[i].c_str());
+#endif
         {
           LogReporter reporter;
           reporter.status = &s;
@@ -1150,7 +1157,7 @@ Status VersionSet::Recover() {
 
   if (status.ok()) {
     if (selected == NULL) {
-      status = Status::Corruption(dbname_, "no valid manifest available");
+      status = Status::Corruption("No valid db manifest found");
     } else {
       Version* v = new Version(this);
       selected->SaveTo(v);
