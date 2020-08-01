@@ -205,9 +205,9 @@ class DBImpl : public DB {
 
   // If not zero, will temporarily block all background compactions except
   // memtable dumps and manual compactions
-  unsigned int bg_compaction_paused_;
+  unsigned int bg_compaction_disabled_;
   // If not zero, will temporarily block all background compactions
-  unsigned int bg_compaction_paused_all_;
+  unsigned int bg_compaction_paused_;
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   // Has an outstanding bulk insertion request?

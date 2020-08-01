@@ -134,8 +134,8 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       l0_soft_limits_(0),
       l0_hard_limits_(0),
       l0_waits_(0),
+      bg_compaction_disabled_(0),
       bg_compaction_paused_(0),
-      bg_compaction_paused_all_(0),
       bg_compaction_scheduled_(false),
       bulk_insert_in_progress_(false),
       manual_compaction_(NULL) {
@@ -265,15 +265,15 @@ Status DBImpl::FlushMemTable(const FlushOptions& options) {
 
 Status DBImpl::FreezeDbCompaction() {
   MutexLock l(&mutex_);
-  bg_compaction_paused_++;
+  bg_compaction_disabled_++;
   return Status::OK();
 }
 
 Status DBImpl::ResumeDbCompaction() {
   MutexLock l(&mutex_);
-  assert(bg_compaction_paused_ > 0);
-  bg_compaction_paused_--;
-  if (bg_compaction_paused_ == 0) {
+  assert(bg_compaction_disabled_ > 0);
+  bg_compaction_disabled_--;
+  if (bg_compaction_disabled_ == 0) {
     MaybeScheduleCompaction();
   }
   return Status::OK();
@@ -760,7 +760,7 @@ bool DBImpl::HasCompaction() {
     return true;
   } else if (manual_compaction_ != NULL) {
     return true;
-  } else if (bg_compaction_paused_) {
+  } else if (bg_compaction_disabled_) {
     return false;
   } else if (options_.disable_compaction) {
     return false;
@@ -773,7 +773,7 @@ bool DBImpl::HasCompaction() {
 
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
-  if (bg_compaction_scheduled_ || bg_compaction_paused_all_) {
+  if (bg_compaction_scheduled_ || bg_compaction_paused_) {
     // Already scheduled or paused
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
@@ -802,7 +802,7 @@ void DBImpl::BackgroundCall() {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
-  } else if (bg_compaction_paused_all_) {
+  } else if (bg_compaction_paused_) {
     // Abort
   } else {
     BackgroundCompaction();
@@ -1476,7 +1476,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         // If there are no memtables, we directly generate an L0 table for the
         // batch of writes. We start by temporarily pausing background
         // compaction.
-        bg_compaction_paused_all_++;
+        bg_compaction_paused_++;
         while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
           bg_cv_.Wait();
         }
@@ -1499,8 +1499,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         mem->Unref();
         bulk_insert_in_progress_ = false;
         // Restart background compaction
-        assert(bg_compaction_paused_all_ > 0);
-        bg_compaction_paused_all_--;
+        assert(bg_compaction_paused_ > 0);
+        bg_compaction_paused_--;
         MaybeScheduleCompaction();
         bg_cv_.SignalAll();
       }
@@ -1693,7 +1693,7 @@ Status DBImpl::BulkInsert(Iterator* iter) {
 
   MutexLock l(&mutex_);
   // Temporarily disable any background compaction
-  bg_compaction_paused_all_++;
+  bg_compaction_paused_++;
   while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
   }
@@ -1714,8 +1714,8 @@ Status DBImpl::BulkInsert(Iterator* iter) {
 
   bulk_insert_in_progress_ = false;
   // Restart background compaction
-  assert(bg_compaction_paused_all_ > 0);
-  bg_compaction_paused_all_--;
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
   MaybeScheduleCompaction();
   bg_cv_.SignalAll();
   return s;
@@ -2051,7 +2051,7 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   {
     MutexLock l(&mutex_);
     // Temporarily disable any background compaction
-    bg_compaction_paused_all_++;
+    bg_compaction_paused_++;
     while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
       bg_cv_.Wait();
     }
@@ -2060,8 +2060,8 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
     s = InsertLevel0Tables(&insert);
     bulk_insert_in_progress_ = false;
     // Restart background compaction
-    assert(bg_compaction_paused_all_ > 0);
-    bg_compaction_paused_all_--;
+    assert(bg_compaction_paused_ > 0);
+    bg_compaction_paused_--;
     MaybeScheduleCompaction();
     bg_cv_.SignalAll();
   }
