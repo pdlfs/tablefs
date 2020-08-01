@@ -47,14 +47,32 @@ Status PosixUDPServer::OpenAndBind(const std::string& uri) {
   // again later.
   fd_ = socket(AF_INET, SOCK_DGRAM, 0);
   if (fd_ == -1) {
-    status = Status::IOError(strerror(errno));
+    status = Status::IOError("Cannot create UDP socket", strerror(errno));
   } else {
     int rv = bind(fd_, reinterpret_cast<struct sockaddr*>(addr_->rep()),
                   sizeof(struct sockaddr_in));
     if (rv == -1) {
-      status = Status::IOError(strerror(errno));
+      status = Status::IOError("UDP bind", strerror(errno));
       close(fd_);
       fd_ = -1;
+    }
+  }
+
+  if (options_.udp_srv_rcvbuf != -1) {
+    int rv = setsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &options_.udp_srv_rcvbuf,
+                        sizeof(options_.udp_srv_rcvbuf));
+    if (rv != 0) {
+      Log(options_.info_log, 0, "Cannot set SO_RCVBUF=%d: %s",
+          options_.udp_srv_rcvbuf, strerror(errno));
+    }
+  }
+
+  if (options_.udp_srv_sndbuf != -1) {
+    int rv = setsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &options_.udp_srv_sndbuf,
+                        sizeof(options_.udp_srv_sndbuf));
+    if (rv != 0) {
+      Log(options_.info_log, 0, "Cannot set SO_SNDBUF=%d: %s",
+          options_.udp_srv_sndbuf, strerror(errno));
     }
   }
 
@@ -109,7 +127,7 @@ Status PosixUDPServer::BGLoop(int myid) {
 
   Status status;
   if (err) {
-    status = Status::IOError(strerror(err));
+    status = Status::IOError("UDP recvfrom/poll", strerror(err));
   }
   return status;
 }
@@ -180,13 +198,13 @@ void PosixUDPCli::Open(const std::string& uri) {
   }
   fd_ = socket(AF_INET, SOCK_DGRAM, 0);
   if (fd_ == -1) {
-    status_ = Status::IOError(strerror(errno));
+    status_ = Status::IOError("Cannot create UDP socket", strerror(errno));
     return;
   }
   int rv = connect(fd_, reinterpret_cast<struct sockaddr*>(addr.rep()),
                    sizeof(struct sockaddr_in));
   if (rv == -1) {
-    status_ = Status::IOError(strerror(errno));
+    status_ = Status::IOError("UDP connect", strerror(errno));
     close(fd_);
     fd_ = -1;
   }
@@ -202,7 +220,7 @@ Status PosixUDPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
   Status status;
   ssize_t rv = send(fd_, in.contents.data(), in.contents.size(), 0);
   if (rv != in.contents.size()) {
-    status = Status::IOError(strerror(errno));
+    status = Status::IOError("UDP send", strerror(errno));
     return status;
   }
   const uint64_t start = CurrentMicros();
@@ -229,7 +247,7 @@ Status PosixUDPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
 
     // Either poll() or recv() may have returned an error
     if (rv == -1) {
-      status = Status::IOError(strerror(errno));
+      status = Status::IOError("UDP recv/poll", strerror(errno));
       break;
     } else if (rv == 1) {
       continue;

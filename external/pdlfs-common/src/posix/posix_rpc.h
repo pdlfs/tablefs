@@ -55,7 +55,8 @@ class PosixSocketServer {
     double wall;    // wall time
   };
 
-  const RPCOptions& options_;  // For options_.info_log and options_.fs
+  // For options_.info_log, options_.fs, and other socket-specific options
+  const RPCOptions& options_;
   port::Mutex mutex_;
   // bg state below is protected by mutex_
   port::AtomicPointer shutting_down_;

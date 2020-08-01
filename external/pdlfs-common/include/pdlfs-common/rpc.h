@@ -66,22 +66,32 @@ struct RPCOptions {
   // handling.
   ThreadPool* extra_workers;  // Default: NULL
 
-  // Max number of server addrs that may be cached locally
-  // XXX: not all RPC implementations use this. We could remove this from the
-  // options struct, change RPC::Open(...) to RPC::Open(const char* rpc_impl,
-  // const RPCOptions& options, const char* extra_options), and cancel the
-  // rpc::Engine enum class (it is now specified as a plain string).
-  size_t addr_cache_size;  //  Default: 128
   Env* env;  // Default: NULL, which indicates Env::Default() should be used
   // Env* is only used for starting background progressing threads.
 
   // Logger object for recoding progress/error information.
   // If NULL, Logger::Default() will be used.
-  Logger* info_log;
+  Logger* info_log;  // Default: NULL
 
   // Server callback implementation.
   // Not needed for clients.
   rpc::If* fs;
+
+  // Options specific to the Mercury rpc engine
+
+  // Max number of server addrs that may be cached locally
+  size_t addr_cache_size;  //  Default: 128
+
+  // Options specific to the socket rpc engine
+
+  // Per-socket receiver buffer size for server-side UDP sockets. Set to -1 to
+  // skip this configuration.
+  // Default: -1
+  int udp_srv_rcvbuf;
+
+  // Per-socket UDP server-side sender buffer size.
+  // Default: -1
+  int udp_srv_sndbuf;
 };
 
 // Each RPC* is a reference to an RPC instance. This instance either acts as a

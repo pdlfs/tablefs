@@ -35,10 +35,12 @@ RPCOptions::RPCOptions()
       rpc_timeout(5000000),
       num_rpc_threads(1),
       extra_workers(NULL),
-      addr_cache_size(128),
       env(NULL),
       info_log(NULL),
-      fs(NULL) {}
+      fs(NULL),
+      addr_cache_size(128),
+      udp_srv_rcvbuf(-1),
+      udp_srv_sndbuf(-1) {}
 
 int RPC::GetPort() { return -1; }
 

@@ -22,16 +22,17 @@ namespace rados {
 struct RadosConn;  // Opaque handle to a rados cluster
 struct RadosConnOptions {
   RadosConnOptions();
-  // Timeouts (in seconds) excised when bootstrapping ceph rados.
-  // Default: 5 sec
+  // Timeouts (in seconds) excised when bootstrapping ceph rados. Set to -1 to
+  // skip this configuration.
+  // Default: -1
   int client_mount_timeout;
 
   // Timeouts (in seconds) excised when communicating with ceph mon.
-  // Default: 5 sec
+  // Default: -1
   int mon_op_timeout;
 
   // Timeouts (in seconds) excised when communicating with ceph osd.
-  // Default: 5 sec
+  // Default: -1
   int osd_op_timeout;
 };
 

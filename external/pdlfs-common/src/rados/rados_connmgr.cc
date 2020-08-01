@@ -65,9 +65,11 @@ RadosConnMgr::~RadosConnMgr() {
 
 namespace {
 inline void RadosConfSet(rados_t cluster, const char* opt, int val) {
-  char tmp[20];
-  snprintf(tmp, sizeof(tmp), "%d", val);
-  rados_conf_set(cluster, opt, tmp);
+  if (val != -1) {
+    char tmp[20];
+    snprintf(tmp, sizeof(tmp), "%d", val);
+    rados_conf_set(cluster, opt, tmp);
+  }
 }
 
 Status RadosConfAndConnect(  ///
