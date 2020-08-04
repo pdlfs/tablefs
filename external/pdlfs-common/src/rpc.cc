@@ -39,6 +39,8 @@ RPCOptions::RPCOptions()
       info_log(NULL),
       fs(NULL),
       addr_cache_size(128),
+      udp_max_unexpected_msgsz(1432),
+      udp_max_expected_msgsz(1432),
       udp_srv_rcvbuf(-1),
       udp_srv_sndbuf(-1) {}
 

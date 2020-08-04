@@ -21,13 +21,15 @@
 
 namespace pdlfs {
 
-PosixUDPServer::PosixUDPServer(const RPCOptions& options, size_t max_msgsz)
-    : PosixSocketServer(options), max_msgsz_(max_msgsz), bg_work_(0) {}
+PosixUDPServer::PosixUDPServer(const RPCOptions& options)
+    : PosixSocketServer(options),
+      max_msgsz_(options.udp_max_unexpected_msgsz),
+      bg_count_(0) {}
 
 PosixUDPServer::~PosixUDPServer() {
   BGStop();  // Stop receiving new messages
   MutexLock ml(&mutex_);
-  while (bg_work_ != 0) {  // Wait until all existing messages are processed
+  while (bg_count_ != 0) {  // Wait until all bg work items have been processed
     bg_cv_.Wait();
   }
   // More resources will be released by parent
@@ -135,7 +137,7 @@ Status PosixUDPServer::BGLoop(int myid) {
 void PosixUDPServer::HandleIncomingCall(CallState** call) {
   if (options_.extra_workers) {
     mutex_.Lock();
-    ++bg_work_;
+    ++bg_count_;
     // XXX: senders/callers are implicitly rate-limited by not sending them
     // replies. Should we more explicitly rate-limit them? For example, when
     // bg_work_ is larger than a certain threshold, incoming calls are instantly
@@ -155,9 +157,9 @@ void PosixUDPServer::ProcessCallWrapper(void* arg) {
   srv->ProcessCall(call);
   free(call);
   MutexLock ml(&srv->mutex_);
-  assert(srv->bg_work_ > 0);
-  --srv->bg_work_;
-  if (!srv->bg_work_) {
+  assert(srv->bg_count_ > 0);
+  --srv->bg_count_;
+  if (!srv->bg_count_) {
     srv->bg_cv_.SignalAll();
   }
 }
@@ -165,7 +167,12 @@ void PosixUDPServer::ProcessCallWrapper(void* arg) {
 void PosixUDPServer::ProcessCall(CallState* const call) {
   rpc::If::Message in, out;
   in.contents = Slice(call->msg, call->msgsz);
-  options_.fs->Call(in, out);
+  Status s = options_.fs->Call(in, out);
+  if (!s.ok()) {
+    Log(options_.info_log, 0, "Fail to handle incoming call: %s",
+        s.ToString().c_str());
+    return;
+  }
   ssize_t nbytes = sendto(fd_, out.contents.data(), out.contents.size(), 0,
                           call->addrbuf(), call->addrlen);
   if (nbytes != out.contents.size()) {
@@ -175,10 +182,11 @@ void PosixUDPServer::ProcessCall(CallState* const call) {
     char port[NI_MAXSERV];
     getnameinfo(call->addrbuf(), call->addrlen, host, sizeof(host), port,
                 sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-    Log(options_.info_log, 1, "Fail to send data to peer[%s:%s]: %s", host,
-        port, strerror(errno_copy));
+    Log(options_.info_log, 1, "Fail to send rpc reply to client[%s:%s]: %s",
+        host, port, strerror(errno_copy));
 #else
-    Log(options_.info_log, 0, "Error sending: %s", strerror(errno));
+    Log(options_.info_log, 0, "Error sending data to client: %s",
+        strerror(errno));
 #endif
   }
 }

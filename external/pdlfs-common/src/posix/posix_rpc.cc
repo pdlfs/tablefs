@@ -212,7 +212,8 @@ Status PosixRPC::status() {
 
 rpc::If* PosixRPC::OpenStubFor(const std::string& uri) {
   if (!tcp_) {
-    PosixUDPCli* const cli = new PosixUDPCli(options_.rpc_timeout);
+    PosixUDPCli* const cli =
+        new PosixUDPCli(options_.rpc_timeout, options_.udp_max_expected_msgsz);
     cli->Open(uri);
     return cli;
   } else {

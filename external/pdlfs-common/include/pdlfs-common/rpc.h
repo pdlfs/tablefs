@@ -84,6 +84,14 @@ struct RPCOptions {
 
   // Options specific to the socket rpc engine
 
+  // Max unexpected message size in bytes for UDP communication.
+  // Default: 1432
+  size_t udp_max_unexpected_msgsz;
+
+  // Max expected message size for UDP.
+  // Default: 1432
+  size_t udp_max_expected_msgsz;
+
   // Per-socket receiver buffer size for server-side UDP sockets. Set to -1 to
   // skip this configuration.
   // Default: -1
@@ -193,9 +201,9 @@ class If {
     Slice contents;  // Message body, reference to the
     Message() : op(0), err(0) {}
 
-    // To reduce memory copying, a caller may put data in an external
-    // buffer instead of the ones defined below
-    char buf[500];  // Avoiding allocating dynamic memory for small messages
+    // To reduce memory copying, a caller may reference external memory
+    // instead of copying data into the spaces defined below
+    char buf[200];  // Avoiding allocating dynamic memory for small messages
     std::string extra_buf;
   };
 
