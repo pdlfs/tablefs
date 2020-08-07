@@ -366,6 +366,7 @@ struct InsertOptions {
   // Default: kRename
   InsertMethod method;
 
+  InsertOptions(InsertMethod method);
   InsertOptions();
 };
 

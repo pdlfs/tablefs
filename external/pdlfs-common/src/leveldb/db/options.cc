@@ -71,6 +71,14 @@ WriteOptions::WriteOptions() : sync(false) {}
 
 FlushOptions::FlushOptions() : force_flush_l0(false), wait(true) {}
 
+InsertOptions::InsertOptions(InsertMethod method)
+    : no_seq_adjustment(false),
+      suggested_max_seq(0),
+      verify_checksums(false),
+      attach_dir_on_start(false),
+      detach_dir_on_complete(false),
+      method(method) {}
+
 InsertOptions::InsertOptions()
     : no_seq_adjustment(false),
       suggested_max_seq(0),
