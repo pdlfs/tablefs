@@ -217,10 +217,10 @@ Status DBImpl::NewDB() {
     new_db.EncodeTo(&record);
     s = log.AddRecord(record);
     if (s.ok()) {
-      s = file->Close();
+      s = file->Sync();
     }
   }
-  delete file;
+  delete file;  // This will close the file
 #if VERBOSE >= 2
   Log(options_.info_log, 2, "Writing %s: %s", manifest.c_str(),
       s.ToString().c_str());
