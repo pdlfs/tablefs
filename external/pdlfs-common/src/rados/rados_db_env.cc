@@ -140,7 +140,7 @@ Status RadosDbEnvWrapper::CopyFile(const char* src, const char* dst) {
   const bool src_on_rados = FileOnRados(src);
   const bool dst_on_rados = FileOnRados(dst);
   if (src_on_rados ^ dst_on_rados)
-    return Status::NotSupported("Cannot copy file across env boundaries");
+    return Status::NotSupported("Cannot copy files across env boundaries");
   if (src_on_rados) return env_->CopyFile(src, dst);
   return target()->CopyFile(src, dst);
 }
@@ -150,8 +150,9 @@ Status RadosDbEnvWrapper::RenameFile(const char* src, const char* dst) {
   const bool dst_on_rados = FileOnRados(dst);
   if (TryResolveFileType(src) == kTempFile && !src_on_rados && dst_on_rados)
     return RenameLocalTmpToRados(src, dst);
-  if (src_on_rados || dst_on_rados)
-    return Status::NotSupported("Cannot rename files over rados");
+  if (src_on_rados ^ dst_on_rados)
+    return Status::NotSupported("Cannot rename files across env boundaries");
+  if (src_on_rados) return env_->RenameFile(src, dst);
   return target()->RenameFile(src, dst);
 }
 

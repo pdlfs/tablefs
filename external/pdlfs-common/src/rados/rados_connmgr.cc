@@ -172,7 +172,9 @@ Env* RadosConnMgr::OpenEnv(  ///
     Osd* osd, bool owns_osd, const RadosEnvOptions& options) {
   RadosEnv* const env = new RadosEnv(options);
   env->owns_osd_ = owns_osd;
-  env->ofs_ = new Ofs(osd);
+  OfsOptions oopts;
+  oopts.info_log = options.info_log;
+  env->ofs_ = new Ofs(oopts, osd);
   env->osd_ = osd;
   return env;
 }

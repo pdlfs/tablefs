@@ -96,6 +96,10 @@ Status RadosEnv::CopyFile(const char* src, const char* dst) {
   return ofs_->CopyFile(src, dst);
 }
 
+Status RadosEnv::RenameFile(const char* src, const char* dst) {
+  return ofs_->Rename(src, dst);
+}
+
 bool RadosEnv::FileExists(const char* fname) { return ofs_->FileExists(fname); }
 
 Status RadosEnv::GetFileSize(const char* fname, uint64_t* size) {
@@ -123,10 +127,6 @@ inline Status NotSupportedByRadosEnv() {
   return Status::NotSupported("Not supported by rados env");
 }
 }  // namespace
-
-Status RadosEnv::RenameFile(const char* src, const char* dst) {
-  return NotSupportedByRadosEnv();
-}
 
 Status RadosEnv::LockFile(const char* f, FileLock** l) {
   return NotSupportedByRadosEnv();

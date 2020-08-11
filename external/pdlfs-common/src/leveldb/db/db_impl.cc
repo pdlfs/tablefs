@@ -457,6 +457,9 @@ Status DBImpl::Recover(VersionEdit* edit) {
         versions_->SetLastSequence(max_sequence);
       }
     }
+  } else {
+    s = Status::Corruption("Cannot recover db manifest from db storage",
+                           s.ToString().c_str());
   }
 
   return s;
