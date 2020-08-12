@@ -29,7 +29,8 @@ RadosDbEnvOptions::RadosDbEnvOptions()
       table_file_buf_size(1 << 17),
       info_log(NULL) {}
 
-RadosEnvOptions::RadosEnvOptions() : rados_root("/"), info_log(NULL) {}
+RadosEnvOptions::RadosEnvOptions()
+    : rados_root("/"), sync_directory_log_on_unmount(false), info_log(NULL) {}
 
 RadosOptions::RadosOptions() : force_syncio(false) {}
 
@@ -173,6 +174,7 @@ Env* RadosConnMgr::OpenEnv(  ///
   RadosEnv* const env = new RadosEnv(options);
   env->owns_osd_ = owns_osd;
   OfsOptions oopts;
+  oopts.sync_log_on_close = options.sync_directory_log_on_unmount;
   oopts.info_log = options.info_log;
   env->ofs_ = new Ofs(oopts, osd);
   env->osd_ = osd;

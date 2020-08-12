@@ -145,6 +145,7 @@ class DBImpl : public DB {
   void MaybeScheduleCompaction();
   static void BGWork(void* db);
   void BackgroundCall();
+  void BackgroundCompactionWrapper();
   void BackgroundCompaction();
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
@@ -203,14 +204,18 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-  // If not zero, will temporarily block all background compactions except
-  // memtable dumps and manual compactions
+  // If not zero, will disable the scheduling of compactions that are not
+  // memtable compactions or manual compactions
   unsigned int bg_compaction_disabled_;
-  // If not zero, will temporarily block all background compactions
+  // If not zero, will stop scheduling any new compactions and will pause the
+  // progress of an ongoing compaction if there is one
   unsigned int bg_compaction_paused_;
-  // Has a background compaction been scheduled or is running?
+  // Has a background compaction been scheduled and not yet completed?
   bool bg_compaction_scheduled_;
-  // Has an outstanding bulk insertion request?
+  // Is there an active background compaction job? Background compaction work
+  // may be paused (inactive) in the middle
+  bool bg_compaction_in_progress_;
+  // Is there an active foreground bulk insertion job?
   bool bulk_insert_in_progress_;
 
   // Information for a manual compaction

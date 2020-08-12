@@ -65,12 +65,16 @@ struct RadosDbEnvOptions {
 struct RadosEnvOptions {
   RadosEnvOptions();
   // Rados mount point. All files and directories beneath it will sink into
-  // rados and be stored as plain data objects and special fileset objects.
-  // The portion of a file or a directory path beyond the mount point will be
-  // used to name a rados object or a fileset. Calling files or directories out
-  // of the mount point results in errors.
+  // rados and be stored as plain data objects and special directory (fileset)
+  // objects. The portion of a file or a directory path beyond the mount point
+  // will be used to name a rados object or a rados fileset. Calling files or
+  // directories out of the mount point results in errors.
   // Default: "/"
   std::string rados_root;
+  // Perform an additional sync on the log of a directory (fileset) when the
+  // directory is unmounted.
+  // Default: false
+  bool sync_directory_log_on_unmount;
   // Logger for env internal/error information.
   // Default: NULL
   Logger* info_log;

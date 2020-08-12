@@ -137,6 +137,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       bg_compaction_disabled_(0),
       bg_compaction_paused_(0),
       bg_compaction_scheduled_(false),
+      bg_compaction_in_progress_(false),
       bulk_insert_in_progress_(false),
       manual_compaction_(NULL) {
   if (!options_.no_memtable) {
@@ -161,7 +162,7 @@ DBImpl::~DBImpl() {
   Log(options_.info_log, 1, "Shutting down ...");
 #endif
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
-  while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+  while (bg_compaction_scheduled_ || bg_compaction_paused_) {
     bg_cv_.Wait();
   }
   mutex_.Unlock();
@@ -808,7 +809,7 @@ void DBImpl::BackgroundCall() {
   } else if (bg_compaction_paused_) {
     // Abort
   } else {
-    BackgroundCompaction();
+    BackgroundCompactionWrapper();
   }
 
   bg_compaction_scheduled_ = false;
@@ -816,6 +817,13 @@ void DBImpl::BackgroundCall() {
   // so reschedule another compaction if needed.
   MaybeScheduleCompaction();
   bg_cv_.SignalAll();
+}
+
+void DBImpl::BackgroundCompactionWrapper() {
+  assert(!bg_compaction_in_progress_);
+  bg_compaction_in_progress_ = true;
+  BackgroundCompaction();
+  bg_compaction_in_progress_ = false;
 }
 
 void DBImpl::BackgroundCompaction() {
@@ -1034,6 +1042,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = CurrentMicros();
+  int64_t paused_micros = 0;
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 #if VERBOSE >= 4
   Log(options_.info_log, 4, "Compacting %d@%d + %d@%d files ...",
@@ -1061,7 +1070,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   bool has_current_user_key = false;
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
   for (; input->Valid() && !shutting_down_.Acquire_Load();) {
-    // Prioritize immutable compaction work
+    // Prioritize memtable compactions and bulk insertion work
     if (has_imm_.NoBarrier_Load() != NULL) {
       const uint64_t imm_start = CurrentMicros();
       mutex_.Lock();
@@ -1071,6 +1080,19 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       mutex_.Unlock();
       imm_micros += (CurrentMicros() - imm_start);
+    }
+    if (bg_compaction_paused_) {
+      const uint64_t pause_start = CurrentMicros();
+      mutex_.Lock();
+      assert(bg_compaction_in_progress_);
+      bg_compaction_in_progress_ = false;
+      bg_cv_.SignalAll();
+      while (bg_compaction_paused_) {
+        bg_cv_.Wait();
+      }
+      bg_compaction_in_progress_ = true;
+      mutex_.Unlock();
+      paused_micros += (CurrentMicros() - pause_start);
     }
 
     Slice key = input->key();
@@ -1164,7 +1186,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input = NULL;
 
   CompactionStats stats;
-  stats.micros = CurrentMicros() - start_micros - imm_micros;
+  stats.micros = CurrentMicros() - start_micros - paused_micros - imm_micros;
   stats.in0 = compact->compaction->num_input_files(0);
   stats.in1 = compact->compaction->num_input_files(1);
   for (int which = 0; which < 2; which++) {
@@ -1477,10 +1499,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         versions_->SetLastSequence(last_sequence);
       } else {
         // If there are no memtables, we directly generate an L0 table for the
-        // batch of writes. We start by temporarily pausing background
-        // compaction.
+        // batch of writes. We start by temporarily blocking background
+        // compactions.
         bg_compaction_paused_++;
-        while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+        while (bg_compaction_in_progress_ || bulk_insert_in_progress_) {
           bg_cv_.Wait();
         }
 
@@ -1695,9 +1717,9 @@ Status DBImpl::BulkInsert(Iterator* iter) {
   SequenceNumber max_seq;
 
   MutexLock l(&mutex_);
-  // Temporarily disable any background compaction
+  // Temporarily block any background compaction
   bg_compaction_paused_++;
-  while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+  while (bg_compaction_in_progress_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
   }
 
@@ -2042,7 +2064,7 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   InsertionState insert(options, bulk_dir);
   std::vector<std::string>* const names = &insert.source_names;
   if (options.attach_dir_on_start) {
-    // Ignore error since we may have already mounted the directory
+    // Ignore error since we may have already mounted the directory before
     env_->AttachDir(bulk_dir.c_str());
   }
   s = env_->GetChildren(bulk_dir.c_str(), names);
@@ -2053,9 +2075,9 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   std::sort(names->begin(), names->end());
   {
     MutexLock l(&mutex_);
-    // Temporarily disable any background compaction
+    // Temporarily block any background compaction
     bg_compaction_paused_++;
-    while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+    while (bg_compaction_in_progress_ || bulk_insert_in_progress_) {
       bg_cv_.Wait();
     }
 
