@@ -1014,7 +1014,7 @@ Status VersionSet::Recover() {
     s = ReadFileToString(env_, curr.c_str(), &current);
     if (s.ok() && !current.empty()) {
       if (current[current.size() - 1] != '\n') {
-        s = Status::Corruption("CURRENT file does not end with newline");
+        s = Status::Corruption(curr, "CURRENT file does not end with newline");
       } else {
         current.resize(current.size() - 1);
         manifests[2] = dbname_ + "/" + current;
@@ -1110,11 +1110,14 @@ Status VersionSet::Recover() {
 
         if (s.ok()) {
           if (!have_next_file) {
-            s = Status::Corruption("no next_file entry in descriptor");
+            s = Status::Corruption(manifests[i].c_str(),
+                                   "No next_file entry in descriptor");
           } else if (!have_log_number) {
-            s = Status::Corruption("no log_number entry in descriptor");
+            s = Status::Corruption(manifests[i].c_str(),
+                                   "No log_number entry in descriptor");
           } else if (!have_last_sequence) {
-            s = Status::Corruption("no last_seq_number entry in descriptor");
+            s = Status::Corruption(manifests[i].c_str(),
+                                   "No last_seq_number entry in descriptor");
           }
 
           if (!have_prev_log_number) {
@@ -1157,7 +1160,7 @@ Status VersionSet::Recover() {
 
   if (status.ok()) {
     if (selected == NULL) {
-      status = Status::Corruption("No valid db manifest found");
+      status = Status::Corruption(dbname_, "No valid db manifest found");
     } else {
       Version* v = new Version(this);
       selected->SaveTo(v);

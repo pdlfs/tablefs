@@ -73,11 +73,19 @@ Status TableCache::OpenTable(uint64_t file_number, uint64_t file_size,
     }
   }
 
-  if (s.ok() && prefetch) {
+  if (!s.ok()) {
+    Log(options_->info_log, 0, "Error opening table #%llu: %s",
+        static_cast<unsigned long long>(file_number), s.ToString().c_str());
+  } else if (prefetch) {
 #if VERBOSE >= 2
     Log(options_->info_log, 2, "Read table #%llu from storage => %llu bytes",
         static_cast<unsigned long long>(file_number),
         static_cast<unsigned long long>(file_size));
+#endif
+  } else {
+#if VERBOSE >= 5
+    Log(options_->info_log, 5, "Opened table #%llu",
+        static_cast<unsigned long long>(file_number));
 #endif
   }
   return s;

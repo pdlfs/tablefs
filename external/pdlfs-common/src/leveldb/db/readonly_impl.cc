@@ -88,8 +88,11 @@ Status ReadonlyDBImpl::Load() {
   }
 
   if (fname.empty()) {
-    return Status::Corruption(dbname_, "no valid manifest available");
+    return Status::Corruption(dbname_, "No valid manifest available");
   } else {
+#if VERBOSE >= 1
+    Log(options_.info_log, 1, "Fast forwarding db state to %s", fname.c_str());
+#endif
     assert(logfile_ == NULL);
     Status s = env_->NewSequentialFile(fname.c_str(), &logfile_);
     if (s.ok()) {
@@ -275,6 +278,9 @@ Status ReadonlyDB::Open(const Options& options, const std::string& dbname,
   *dbptr = NULL;
 
   ReadonlyDBImpl* impl = new ReadonlyDBImpl(options, dbname);
+#if VERBOSE >= 1
+  Log(options.info_log, 1, "Opening db at %s ...", dbname.c_str());
+#endif
   impl->mutex_.Lock();
   Status s = impl->Load();
   impl->mutex_.Unlock();

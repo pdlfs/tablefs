@@ -396,11 +396,11 @@ Status DBImpl::Recover(VersionEdit* edit) {
       }
     } else {
       return Status::InvalidArgument(
-          "db does not exist (create_if_missing==0)");
+          dbname_, "DB does not exist (create_if_missing==0)");
     }
   } else {
     if (options_.error_if_exists) {
-      return Status::InvalidArgument("db exists (error_if_exists==1)");
+      return Status::InvalidArgument(dbname_, "DB exists (error_if_exists==1)");
     }
   }
 
