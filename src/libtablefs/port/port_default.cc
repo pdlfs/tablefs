@@ -34,7 +34,7 @@
 #include "../fsdb.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fsdb0.h"
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/readonly.h"
