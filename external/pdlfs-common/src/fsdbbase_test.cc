@@ -9,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fsdbbase.h"
 #include "pdlfs-common/testharness.h"
 
 namespace pdlfs {
