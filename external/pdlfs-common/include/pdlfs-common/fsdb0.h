@@ -11,8 +11,8 @@
 #pragma once
 
 #include "pdlfs-common/fsdbbase.h"
+#include "pdlfs-common/coding.h"
 
-#include <string>
 #include <vector>
 
 namespace pdlfs {
