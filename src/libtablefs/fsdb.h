@@ -35,7 +35,7 @@
 
 #include "fs.h"
 
-#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fsdb0.h"
 
 #include <stdint.h>
 
