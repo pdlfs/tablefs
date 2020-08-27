@@ -35,9 +35,10 @@
 
 #include "fs.h"
 
-#include "pdlfs-common/pdlfs_platform.h"
+#include "pdlfs-common/port.h"
 
 #include <errno.h>
+#include <unistd.h>
 #ifndef ENOSYS
 #define ENOSYS EPERM
 #endif

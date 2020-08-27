@@ -34,6 +34,7 @@
 #pragma once
 
 #include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
 #include <stdint.h>
