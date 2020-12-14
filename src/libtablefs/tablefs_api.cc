@@ -33,12 +33,11 @@
  */
 #include "tablefs/tablefs_api.h"
 
-#include "fs.h"
-
-#include "pdlfs-common/port.h"
-
 #include <errno.h>
 #include <unistd.h>
+
+#include "fs.h"
+#include "pdlfs-common/port.h"
 #ifndef ENOSYS
 #define ENOSYS EPERM
 #endif
@@ -196,6 +195,23 @@ int tablefs_mkfile(tablefs_t* h, const char* path, uint32_t mode) {
   }
 }
 
+int tablefs_unlink(tablefs_t* h, const char* path) {
+  pdlfs::Status status;
+  if (!h) {
+    status = BadArgs();
+  } else if (!path || path[0] != '/') {
+    status = BadArgs();
+  } else {
+    status = h->fs->Unlnk(h->me, path, NULL);
+  }
+
+  if (!status.ok()) {
+    return FilesystemError(h, status);
+  } else {
+    return 0;
+  }
+}
+
 int tablefs_mkdir(tablefs_t* h, const char* path, uint32_t mode) {
   pdlfs::Status status;
   if (!h) {
@@ -204,6 +220,23 @@ int tablefs_mkdir(tablefs_t* h, const char* path, uint32_t mode) {
     status = BadArgs();
   } else {
     status = h->fs->Mkdir(h->me, path, mode, NULL);
+  }
+
+  if (!status.ok()) {
+    return FilesystemError(h, status);
+  } else {
+    return 0;
+  }
+}
+
+int tablefs_rmdir(tablefs_t* h, const char* path) {
+  pdlfs::Status status;
+  if (!h) {
+    status = BadArgs();
+  } else if (!path || path[0] != '/') {
+    status = BadArgs();
+  } else {
+    status = h->fs->Rmdir(h->me, path, NULL);
   }
 
   if (!status.ok()) {
