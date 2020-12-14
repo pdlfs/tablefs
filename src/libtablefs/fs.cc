@@ -33,11 +33,12 @@
  */
 #include "fs.h"
 
-#include <sys/stat.h>
-
 #include "fsdb.h"
+
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mutexlock.h"
+
+#include <sys/stat.h>
 
 namespace pdlfs {
 
@@ -121,7 +122,7 @@ Status Filesystem::Rmdir(  ///
   if (!status.ok()) {
     return status;
   } else if (tgt.empty()) {  // Special case in which path is a root
-    return Status::NotSupported(Slice());
+    return Status::AssertionFailed(Slice());
   }
 
   Stat stat;

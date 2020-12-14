@@ -33,11 +33,12 @@
  */
 #include "tablefs/tablefs_api.h"
 
+#include "fs.h"
+
+#include "pdlfs-common/port.h"
+
 #include <errno.h>
 #include <unistd.h>
-
-#include "fs.h"
-#include "pdlfs-common/port.h"
 #ifndef ENOSYS
 #define ENOSYS EPERM
 #endif
@@ -62,6 +63,8 @@ void SetErrno(const pdlfs::Status& s) {
     errno = EISDIR;
   } else if (s.IsDirExpected()) {
     errno = ENOTDIR;
+  } else if (s.IsDirNotEmpty()) {
+    errno = ENOTEMPTY;
   } else if (s.IsInvalidFileDescriptor()) {
     errno = EBADF;
   } else if (s.IsTooManyOpens()) {
