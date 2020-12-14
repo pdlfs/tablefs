@@ -33,12 +33,11 @@
  */
 #include "fs.h"
 
-#include "fsdb.h"
+#include <sys/stat.h>
 
+#include "fsdb.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mutexlock.h"
-
-#include <sys/stat.h>
 
 namespace pdlfs {
 
@@ -111,6 +110,26 @@ Status Filesystem::Closdir(FilesystemDir* dir) {
   return Status::OK();
 }
 
+Status Filesystem::Rmdir(  ///
+    const User& who, const char* const pathname,
+    FilesystemDbStats* const stats) {
+  bool has_tailing_slashes(false);
+  Stat parent_dir;
+  Slice tgt;
+  Status status = Resolu(who, r_->rstat_, pathname, &parent_dir, &tgt,
+                         &has_tailing_slashes, stats);
+  if (!status.ok()) {
+    return status;
+  } else if (tgt.empty()) {  // Special case in which path is a root
+    return Status::NotSupported(Slice());
+  }
+
+  Stat stat;
+  status = RemoveDir(who, parent_dir, tgt, &stat, stats);
+
+  return status;
+}
+
 Status Filesystem::Mkdir(  ///
     const User& who, const char* const pathname, uint32_t mode,
     FilesystemDbStats* const stats) {
@@ -128,6 +147,27 @@ Status Filesystem::Mkdir(  ///
   mode = S_IFDIR | (ALLPERMS & mode);
   Stat stat;
   status = Put(who, parent_dir, tgt, mode, &stat, stats);
+
+  return status;
+}
+
+Status Filesystem::Unlnk(  ///
+    const User& who, const char* pathname, FilesystemDbStats* const stats) {
+  bool has_tailing_slashes(false);
+  Stat parent_dir;
+  Slice tgt;
+  Status status = Resolu(who, r_->rstat_, pathname, &parent_dir, &tgt,
+                         &has_tailing_slashes, stats);
+  if (!status.ok()) {
+    return status;
+  } else if (tgt.empty()) {  // Special case in which path is a root
+    return Status::FileExpected(Slice());
+  } else if (has_tailing_slashes) {  // Path is a dir
+    return Status::FileExpected(Slice());
+  }
+
+  Stat stat;
+  status = Delete(who, parent_dir, tgt, &stat, stats);
 
   return status;
 }
@@ -406,6 +446,86 @@ Status Filesystem::Fetch(  ///
   }
 }
 
+Status Filesystem::RemoveDir(  ///
+    const User& who, const Stat& parent_dir, const Slice& name,
+    Stat* const stat, FilesystemDbStats* const stats) {
+  if (!IsDirWriteOk(options_, parent_dir, who)) {
+    return Status::AccessDenied(Slice());
+  }
+  const DirId pdir(parent_dir);
+  Status status;
+  const bool use_mu = !options_.skip_deletion_checks;
+  if (use_mu) {
+    for (int i = 0; i < kWay; i++) {
+      mus_[i].Lock();
+    }
+    status = db_->Get(pdir, name, stat, stats);
+    if (status.ok() && (stat->FileMode() & S_IFDIR) != S_IFDIR) {
+      status = Status::DirExpected(Slice());
+    }
+    {
+      FilesystemDb::Dir* const dir = db_->Opendir(DirId(*stat));
+      std::string tmpname;
+      Stat tmp;
+      Status ss = db_->Readdir(dir, &tmp, &tmpname);
+      if (ss.ok()) {
+        status = Status::DirNotEmpty(Slice());
+      } else if (status.IsNotFound()) {
+        status = Status::OK();
+      }
+      db_->Closedir(dir);
+    }
+  }
+
+  if (status.ok()) {
+    status = db_->Delete(pdir, name);
+  }
+
+  if (use_mu) {
+    for (int i = kWay - 1; i >= 0; i--) {
+      mus_[i].Unlock();
+    }
+  }
+
+  return status;
+}
+
+Status Filesystem::Delete(  ///
+    const User& who, const Stat& parent_dir, const Slice& name,
+    Stat* const stat, FilesystemDbStats* const stats) {
+  if (!IsDirWriteOk(options_, parent_dir, who)) {
+    return Status::AccessDenied(Slice());
+  }
+  const DirId pdir(parent_dir);
+  Status status;
+  char tmp[30];
+  port::Mutex* mu = NULL;
+  uint32_t hash;
+  Slice key;
+  if (!options_.skip_deletion_checks) {
+    key = LookupKey(tmp, pdir, name);
+    hash = Hash0(key);
+    // Mutex locking is needed when name existence must be checked prior to
+    // deletion.
+    mu = &mus_[hash & (kWay - 1)];
+    mu->Lock();
+    status = db_->Get(pdir, name, stat, stats);
+    if (status.ok() && (stat->FileMode() & S_IFREG) != S_IFREG) {
+      status = Status::FileExpected(Slice());
+    }
+  }
+
+  if (status.ok()) {
+    status = db_->Delete(pdir, name);
+  }
+
+  if (mu) {
+    mu->Unlock();
+  }
+
+  return status;
+}
+
 Status Filesystem::Put(  ///
     const User& who, const Stat& parent_dir, const Slice& name, uint32_t mode,
     Stat* const stat, FilesystemDbStats* const stats) {
@@ -529,6 +649,7 @@ Slice EncodeTo(FilesystemRoot* r, char* scratch) {
 
 FilesystemOptions::FilesystemOptions()
     : size_lookup_cache(0),
+      skip_deletion_checks(false),
       skip_name_collision_checks(false),
       skip_perm_checks(false),
       rdonly(false) {}

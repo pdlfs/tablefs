@@ -33,14 +33,14 @@
  */
 #include "fs.h"
 
-#include "fsdb.h"
-#include "port.h"
-
-#include "pdlfs-common/testharness.h"
+#include <sys/stat.h>
 
 #include <set>
 #include <string>
-#include <sys/stat.h>
+
+#include "fsdb.h"
+#include "pdlfs-common/testharness.h"
+#include "port.h"
 
 namespace pdlfs {
 
@@ -80,7 +80,11 @@ class FilesystemTest {
 
   Status Creat(const char* path) { return fs_->Creat(me, path, 0660, &stats_); }
 
+  Status Unlnk(const char* path) { return fs_->Unlnk(me, path, &stats_); }
+
   Status Mkdir(const char* path) { return fs_->Mkdir(me, path, 0770, &stats_); }
+
+  Status Rmdir(const char* path) { return fs_->Rmdir(me, path, &stats_); }
 
   ~FilesystemTest() {
     if (fs_) {
@@ -130,6 +134,25 @@ TEST(FilesystemTest, Files_NoDupChecks) {
   ASSERT_OK(Creat("/1"));
 }
 
+TEST(FilesystemTest, Files_Deletes) {
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat("/1"));
+  ASSERT_OK(Mkdir("/2"));
+  ASSERT_OK(Unlnk("/1"));
+  ASSERT_ERR(Unlnk("/2"));
+  ASSERT_ERR(Unlnk("/3"));
+}
+
+TEST(FilesystemTest, Files_Deletes_NoChecks) {
+  options_.skip_deletion_checks = true;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat("/1"));
+  ASSERT_OK(Mkdir("/2"));
+  ASSERT_OK(Unlnk("/1"));
+  ASSERT_OK(Unlnk("/2"));
+  ASSERT_OK(Unlnk("/3"));
+}
+
 TEST(FilesystemTest, Dirs) {
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
@@ -150,6 +173,35 @@ TEST(FilesystemTest, Dirs_NoDupChecks) {
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Mkdir("/1"));
+}
+
+TEST(FilesystemTest, Dirs_Deletes) {
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/2"));
+  ASSERT_OK(Mkdir("/2/b"));
+  ASSERT_OK(Mkdir("/3"));
+  ASSERT_OK(Mkdir("/3/b"));
+  ASSERT_OK(Creat("/4"));
+  ASSERT_OK(Rmdir("/1"));
+  ASSERT_ERR(Rmdir("/2"));
+  ASSERT_ERR(Rmdir("/3"));
+  ASSERT_ERR(Rmdir("/4"));
+}
+
+TEST(FilesystemTest, Dirs_Deletes_NoChecks) {
+  options_.skip_deletion_checks = true;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/2"));
+  ASSERT_OK(Mkdir("/2/b"));
+  ASSERT_OK(Mkdir("/3"));
+  ASSERT_OK(Mkdir("/3/b"));
+  ASSERT_OK(Creat("/4"));
+  ASSERT_OK(Rmdir("/1"));
+  ASSERT_OK(Rmdir("/2"));
+  ASSERT_OK(Rmdir("/3"));
+  ASSERT_OK(Rmdir("/4"));
 }
 
 TEST(FilesystemTest, Subdirs) {

@@ -33,12 +33,13 @@
  */
 #pragma once
 
+#include <stdint.h>
+
+#include <string>
+
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
-
-#include <stdint.h>
-#include <string>
 
 namespace pdlfs {
 
@@ -50,6 +51,7 @@ struct FilesystemRoot;
 struct FilesystemOptions {
   FilesystemOptions();
   size_t size_lookup_cache;  // Default: 0 (cache disabled)
+  bool skip_deletion_checks;
   bool skip_name_collision_checks;
   bool skip_perm_checks;
   bool rdonly;
@@ -75,8 +77,10 @@ class Filesystem {
   // REQUIRES: OpenFilesystem has been called.
   Status Creat(const User& who, const char* pathname, uint32_t mode,
                FilesystemDbStats* stats);
+  Status Unlnk(const User& who, const char* pathname, FilesystemDbStats* stats);
   Status Mkdir(const User& who, const char* pathname, uint32_t mode,
                FilesystemDbStats* stats);
+  Status Rmdir(const User& who, const char* pathname, FilesystemDbStats* stats);
   Status Lstat(const User& who, const char* pathname, Stat* stat,
                FilesystemDbStats* stats);
 
@@ -123,6 +127,9 @@ class Filesystem {
   Status SeekToDir(const User& who, const Stat& parent_dir, const Slice& name,
                    FilesystemDir** dir, FilesystemDbStats* stats);
 
+  Status RemoveDir(const User& who, const Stat& parent_dir, const Slice& name,
+                   Stat* stat, FilesystemDbStats* stats);
+
   // Retrieve information of a name under a given parent directory. If mode is
   // specified, only names of a matching file type (e.g., S_IFDIR, S_IFREG) are
   // considered valid. Set mode to 0 to allow all file types.
@@ -133,6 +140,11 @@ class Filesystem {
   // and return OK and the stat of the newly created node on success.
   Status Put(const User& who, const Stat& parent_dir, const Slice& name,
              uint32_t mode, Stat* stat, FilesystemDbStats* stats);
+
+  // Remove an existing node from a given parent directory. Check node existence
+  // and return OK and the stat of the deleted node on success.
+  Status Delete(const User& who, const Stat& parent_dir, const Slice& name,
+                Stat* stat, FilesystemDbStats* stats);
 
   // Max number of read or write transactions that may go simultaneously. This
   // limit only applies to multi-op transactions. A multi-op transaction
