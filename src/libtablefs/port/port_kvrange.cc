@@ -57,7 +57,7 @@ struct FilesystemDb::Rep {
 namespace {
 struct ReadOptions2 : public ::kvrangedb::ReadOptions {
   ReadOptions2() : ReadOptions(), snapshot(NULL) {}
-  void* snapshot;
+  const void* snapshot;
 };
 ::kvrangedb::Status OpenDb(  ///
     const FilesystemOptions& options, const std::string& dbloc,
