@@ -45,9 +45,42 @@ namespace port {
 // implementation supporting range queries atop KVSSD through storing a
 // secondary ordered key index in the KVSSD device. KVRANGEDB is a LANL research
 // project - https://github.com/celeryfake/kvrangedb
-typedef MXDB<::kvrangedb::DB, ::kvrangedb::Slice, ::kvrangedb::Status,
-             kNameInKey>
-    MDB;
+class MDB : public MXDB<::kvrangedb::DB, ::kvrangedb::Slice,
+                        ::kvrangedb::Status, kNameInKey> {
+ public:
+  explicit MDB(::kvrangedb::DB* dx) : MXDB(dx) {}
+  ~MDB() {}
+  Status READDIR2(Dir<::kvrangedb::Iterator>* dir, Stat* stat,
+                  std::string* name) {
+    if (dir == NULL) return Status::NotFound(Slice());
+    ::kvrangedb::Iterator* const iter = dir->iter;
+    if (!iter->Valid()) {  // Either we hit the bottom or an error
+      return Status::NotFound(Slice());
+    }
+
+    ::kvrangedb::Slice xinput = iter->value();
+    ::kvrangedb::Slice xkey = iter->key();
+
+    Slice input = Slice(xinput.data(), xinput.size());
+    Slice key = Slice(xkey.data(), xkey.size());
+    if (!key.starts_with(dir->key_prefix))  // Hitting the end of directory
+      return Status::NotFound(Slice());
+    if (!stat->DecodeFrom(&input)) {
+      return Status::Corruption("Cannot parse Stat");
+    }
+
+    Slice filename;
+    key.remove_prefix(dir->key_prefix.length());
+    filename = key;
+
+    *name = filename.ToString();
+    dir->n++;  // +1 entries scanned
+    // Seek to the next entry
+    iter->Next();
+
+    return Status::OK();
+  }
+};
 }  // namespace port
 struct FilesystemDb::Rep {
   Rep();
@@ -130,7 +163,7 @@ FilesystemDb::Dir* FilesystemDb::Opendir(const DirId& dir_id) {
 }
 
 Status FilesystemDb::Readdir(Dir* dir, Stat* stat, std::string* name) {
-  return rep_->mdb->READDIR<::kvrangedb::Iterator>(
+  return rep_->mdb->READDIR2(
       reinterpret_cast<port::MDB::Dir<::kvrangedb::Iterator>*>(dir), stat,
       name);
 }
