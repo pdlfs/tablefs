@@ -15,7 +15,7 @@
 include (FindPackageHandleStandardArgs)
 
 find_path (LEVELDB_INCLUDE leveldb/db.h HINTS ${LEVELDB_INCLUDE_DIR})
-find_library (LEVELDB_LIBRARY leveldb HINTS ${LEVELDB_LIBRARY})
+find_library (LEVELDB_LIBRARY leveldb HINTS ${LEVELDB_LIBRARY_DIR})
 
 find_package_handle_standard_args (Leveldb DEFAULT_MSG
         LEVELDB_INCLUDE LEVELDB_LIBRARY)
