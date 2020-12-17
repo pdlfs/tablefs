@@ -300,6 +300,21 @@ TEST(FilesystemTest, Resolv_WithCache) {
   ASSERT_EQ(stats_.gets, 1);
 }
 
+TEST(FilesystemTest, Rmdir_WithCache) {
+  options_.size_lookup_cache = 128;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Creat("/1/a"));
+  ASSERT_OK(Unlnk("/1/a"));
+  ASSERT_OK(Rmdir("/1"));  // Must remove dir from cache
+  ASSERT_OK(Mkdir("/1"));
+  // If rmdir didn't clean up the cache, the wrong cache entry will be used
+  ASSERT_OK(Creat("/1/a"));
+  ASSERT_OK(Exist("/1/a"));
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Exist("/1/a"));
+}
+
 TEST(FilesystemTest, Listdir1) {
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Creat("/1"));

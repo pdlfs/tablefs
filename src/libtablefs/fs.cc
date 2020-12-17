@@ -480,6 +480,14 @@ Status Filesystem::RemoveDir(  ///
 
   if (status.ok()) {
     status = db_->Delete(pdir, name);
+    FilesystemLookupCache* const c = cache_;
+    if (c && status.ok()) {
+      char tmp[30];
+      Slice key = LookupKey(tmp, pdir, name);
+      uint32_t hash = Hash0(key);
+      MutexLock cl(&c->mu_);
+      c->lru_.Erase(key, hash);
+    }
   }
 
   if (use_mu) {
