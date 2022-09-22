@@ -1,7 +1,6 @@
 **Fast and efficient filesystem metadata through LSM-Trees.**
 
-[![CI](https://github.com/pdlfs/tablefs/actions/workflows/ci.yml/badge.svg)](htt
-ps://github.com/pdlfs/tablefs/actions/workflows/ci.yml)
+[![CI](https://github.com/pdlfs/tablefs/actions/workflows/ci.yml/badge.svg)](https://github.com/pdlfs/tablefs/actions/workflows/ci.yml)
 [![Build Status](https://travis-ci.org/pdlfs/tablefs.svg?branch=master)](https://travis-ci.org/pdlfs/tablefs)
 [![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
 
